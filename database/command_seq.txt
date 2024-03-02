@@ -1,0 +1,20 @@
+# Step 1: Download my-sql server image
+sudo docker pull mysql/mysql-server:8.0
+
+# Step 2: Initialize and run a container with mysql
+docker run --name sql-server -p 3307:3306 -e MY_SQL_ROOT_PASSWORD=root -d mysql/mysql-server:8.0
+
+# Step 3: Installing the mysql client
+sudo apt-get install mysql-client
+
+# Step 4: Run the below command and copy the password written after GENERATED ROOT PASSWORD (search for this phrase in the logs) in the logs that appear on running the command
+sudo docker logs sql-server
+
+# Step 5: Start the bash command line for the container
+sudo docker exec -it sql-server bash
+
+# Step 6: In the bash client, type the following command and then paste the password copied in Step 4: 
+mysql -uroot -p -A
+
+# Step 7: Change the password to the desired password using the following command in the sql shell:
+ALTER USER 'root'@'localhost' IDENTIFIED BY '[newpassword]'
