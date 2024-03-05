@@ -4,56 +4,8 @@ import pandas as pd
 import mysql.connector
 from multiprocessing.dummy import Pool
 
-class DataHandler:
-    def __init__(self,columns=None,dtypes=None,is_SQL=False,SQL_handle=None,table_name=None):
-        self.columns=columns
-        self.dtypes=dtypes
-        self.is_SQL=is_SQL
-        self.SQL_handle=SQL_handle
-        self._setup(table_name)
-
-    def _setup(self,table_name):
-        if not self.is_SQL:
-            self.table=pd.DataFrame(columns=self.columns)
-        else:
-            self.table_name=self.SQL_handle.jobrunner.apply(self.SQL_handle.hasTable,(table_name,self.columns,self.dtypes))
-    
-    @property
-    def Count(self):
-        if not self.is_SQL:
-            return self.table.shape[0]
-        else:
-            return self.SQL_handle.jobrunner.apply(self.SQL_handle.Count,(self.table_name,))
-
-    def Insert(self,row):
-        if not self.is_SQL:
-            id=self.table.shape[0]
-            self.table.loc[self.table.shape[0]]=row
-        else:
-            id=self.SQL_handle.jobrunner.apply(self.SQL_handle.Insert,(self.table_name,row))
-        return id
-
-    def Update(self,idx,col,val):
-        if not self.is_SQL:
-            self.table.loc[idx,col]=val
-        else:
-            self.SQL_handle.jobrunner.apply(self.SQL_handle.setVal,(self.table_name,idx,col,val))
-
-    def GetAT(self,idx,col):
-        if not self.is_SQL:
-            return self.table.loc[idx,col]
-        else:
-            return self.SQL_handle.jobrunner.apply(self.SQL_handle.getVal,(self.table_name,idx,col))
-
-    def IncrementBy(self,idx,col,by):
-        if not self.is_SQL:
-            self.table.loc[idx,col]+=by
-        else:
-            self.SQL_handle.jobrunner.apply(self.SQL_handle.IncrementBy,(self.table_name,idx,col,by))
-
-
 class SQLHandler:
-    def __init__(self,host='localhost',user='root',password='abc',db='dQdb'):
+    def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database'):
         self.jobrunner=Pool(1)
         self.host=host
         self.user=user
@@ -65,10 +17,25 @@ class SQLHandler:
         while not connected:
             try:
                 self.mydb = mysql.connector.connect(host=self.host,user=self.user,password=self.password)
-                self.UseDB(self.db)
+                self.Use_database(self.db)
                 connected=True
+                print("MYSQL server connected.")
             except Exception:
                 pass
+        return "Connected", 200
+    
+    def disconnect(self):
+        connected = True
+        while connected:
+            try:
+                if self.mydb.is_connected():
+                    self.mydb.close()
+                    print("MYSQL server closed.")
+                    connected = False
+            except Exception as e:
+                print("Error while disconnecting:", e)
+                pass
+        return "Disconnected", 200
     
     def query(self, sql):
         try:
@@ -83,64 +50,113 @@ class SQLHandler:
         self.mydb.commit()
         return res
 
-    def UseDB(self,dbname=None):
-        res=self.query("SHOW DATABASES")
-        if dbname not in [r[0] for r in res]:
-            self.query(f"CREATE DATABASE {dbname}")
-        self.query(f"USE {dbname}")
+    def Use_database(self,dbname='server_database'):
+        try:
+            res=self.query("SHOW DATABASES")
+            if dbname not in [r[0] for r in res]:
+                self.query(f"CREATE DATABASE {dbname}")
+            self.query(f"USE {dbname}")
+            return dbname,200
+        except Exception as e:
+            return e, 500
 
-    def DropDB(self,dbname=None):
-        res=self.query("SHOW DATABASES")
-        if dbname in [r[0] for r in res]:
-            self.query(f"DROP DATABASE {dbname}")
+    def Drop_database(self,dbname='server_database'):
+        try:
+            res=self.query("SHOW DATABASES")
+            if dbname in [r[0] for r in res]:
+                self.query(f"DROP DATABASE {dbname}")
+            return "Successfully dropped database",200
+        except Exception as e:
+            return e, 500
 
-    def hasTable(self,tabname=None,columns=None,dtypes=None):
-        res=self.query("SHOW TABLES")
-        if tabname not in [r[0] for r in res]:
-            dmap={'int':'INT','str':'VARCHAR(32)'}
-            col_config=''
-            for c,d in zip(columns,dtypes):
-                col_config+=f", {c} {dmap[d]}"
-            self.query(f"CREATE TABLE {tabname} (id INT AUTO_INCREMENT PRIMARY KEY{col_config})")
-        return tabname
+    def Create_table(self, tabname, columns, dtypes):
+        try:
+            # Check if the table already exists
+            res = self.query("SHOW TABLES")
+            if tabname not in [r[0] for r in res]:
+                # Map data types
+                dmap = {'Number': 'INT', 'String': 'VARCHAR(32)'}
 
-    def getVal(self,table_name,idx,col):
-        row=self.query(f"SELECT {col} FROM {table_name} where id={idx+1}")
-        if len(row)==0:raise KeyError(f"Key:idx-{idx} is not found")
-        else:return row[0][0]
+                # Construct column configuration
+                col_config = ', '.join([f"{c} {dmap[d]}" for c, d in zip(columns, dtypes)])
 
-    def setVal(self,table_name,idx,col,val):
-        if type(val)==str:
-            self.query(f"UPDATE {table_name} SET {col}='{val}' WHERE id={idx+1}")
-        else:
-            self.query(f"UPDATE {table_name} SET {col}={val} WHERE id={idx+1}")
+                # Execute SQL query to create the table
+                self.query(f"CREATE TABLE {tabname} (id INT AUTO_INCREMENT PRIMARY KEY, {col_config})")
 
-    def IncrementBy(self,table_name,idx,col,by):
-        self.query(f"UPDATE {table_name} SET {col}={col}+{by} WHERE id={idx+1}")
+            return tabname,200
+        except Exception as e:
+            return e, 500
+
+
+
+    def Get_range(self,table_name,low, high, col):
+        try:
+            # Execute SQL query to retrieve entries within the specified range
+            rows = self.query(f"SELECT {col} FROM {table_name} WHERE {col}>={low} AND {col}<{high}")
+
+            # Check if any rows were returned
+            if len(rows) == 0:
+                raise KeyError(f"No entries found where {col} is in the range [{low}, {high})")
+            else:
+                # Return the list of values from the query result
+                return [row[0] for row in rows],200
+        except Exception as e:
+            return e, 500
+
+
+    def Delete_entry(self,table_name,idx,col):
+        try:
+            res = self.query(f"DELETE FROM {table_name} WHERE {col}={idx}")
+            if res.rowcount > 0:
+                return "Entry deleted successfully",200
+            else:
+                return "No matching entry found for deletion",404
+        except Exception as e:
+            return e,500
+
+
+    def Update_database(self,table_name,Stud_id,updated_val):
+        try:
+            # Iterate through the key-value pairs of the dictionary
+            update_queries = []
+            for col, val in updated_val.items():
+                # Check the type of the value
+                if isinstance(val, str):
+                    # For string values, enclose in single quotes
+                    update_queries.append(f"{col}='{val}'")
+                else:
+                    update_queries.append(f"{col}={val}")
+
+            # Join the update queries into a single string
+            update_query_str = ', '.join(update_queries)
+
+            # Execute the update query
+            res = self.query(f"UPDATE {table_name} SET {update_query_str} WHERE Stud_id={Stud_id}")
+
+            # Check if any row was affected (updated)
+            if res.rowcount > 0:
+                return "Entry updated successfully",200
+            else:
+                return "No matching entry found for update",404
+
+        except Exception as e:
+            return e,500
 
     def Insert(self,table_name,row):
-        id=self.Count(table_name)
-        row_str='0'
-        for v in row:
-            if type(v)==str:
-                row_str+=f", '{v}'"
-            else:
-                v_reduced='NULL' if np.isnan(v) else v
-                row_str+=f", {v_reduced}"
-        self.query(f"INSERT INTO {table_name} VALUES ({row_str})")
-        return id
-
-    def getTopicTables(self,):
-        res=self.query("SHOW TABLES")
-        return [r[0] for r in res if r[0] not in ['subl','publ']]
     
-    def Count(self,table_name):
-        res=self.query(f"SELECT count(id) FROM {table_name}")
-        return res[0][0]
-    
+        try:
+            row_str = '0'
+            
+            for v in row:
+                if isinstance(v, str):
+                    row_str += f", '{v}'"
+                else:
+                    v_reduced = 'NULL' if np.isnan(v) else v
+                    row_str += f", {v_reduced}"
+            
+            res = self.query(f"INSERT INTO {table_name} VALUES ({row_str})")
+            
+            return "Successfully inserted {row}", 200
+        except Exception as e:
+            return e, 500
 
-def env_config():
-    config={}
-    config['persist']=True if os.environ['PERSIST']=='yes' else False
-    config['broker_id']=os.environ['BID']
-    return config
