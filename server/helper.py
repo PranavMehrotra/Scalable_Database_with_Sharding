@@ -38,51 +38,88 @@ class SQLHandler:
         return "Disconnected", 200
     
     def query(self, sql):
+        print(sql)
         try:
             cursor = self.mydb.cursor()
             cursor.execute(sql)
-        except Exception:
-            self.connect()
-            cursor = self.mydb.cursor()
-            cursor.execute(sql)
-        res=cursor.fetchall()
-        cursor.close()
-        self.mydb.commit()
-        return res
+            res=cursor.fetchall()
+            cursor.close()
+            self.mydb.commit()
+            return res,200
+        except mysql.connector.errors.DataError as e:
+            return "DataError: data exception", 400
+        except mysql.connector.errors.IntegrityError as e:
+            return "IntegrityError: Stud_id already exists", 400
+        except mysql.connector.errors.ProgrammingError as e:
+            return str(e.msg), 400
+        except mysql.connector.Error as e:
+            return str(e.msg),400
+        except Exception as e:
+            return str(e), 500
 
     def Use_database(self,dbname='server_database'):
         try:
-            res=self.query("SHOW DATABASES")
+            res,status = self.query("SHOW DATABASES")
+            if status != 200:
+                return res, status
+            
             if dbname not in [r[0] for r in res]:
-                self.query(f"CREATE DATABASE {dbname}")
-            self.query(f"USE {dbname}")
+                res,status = self.query(f"CREATE DATABASE {dbname}")
+                if status != 200:
+                    return res, status
+                
+            res,status = self.query(f"USE {dbname}")
+            if status != 200:
+                    return res, status
             return dbname,200
         except Exception as e:
             return e, 500
 
     def Drop_database(self,dbname='server_database'):
         try:
-            res=self.query("SHOW DATABASES")
+            res=res,status = self.query("SHOW DATABASES")
+            if status != 200:
+                    return res, status
+            
             if dbname in [r[0] for r in res]:
-                self.query(f"DROP DATABASE {dbname}")
+                res,status = self.query(f"DROP DATABASE {dbname}")
+                if status != 200:
+                    return res, status
+                
             return "Successfully dropped database",200
+        except Exception as e:
+            return e, 500
+
+    def Get_table_rows(self, table_name):
+        try:
+            res,status = self.query(f"SELECT * FROM {table_name}")
+            if status != 200:
+                    return res, status
+            return res,200
         except Exception as e:
             return e, 500
 
     def Create_table(self, tabname, columns, dtypes):
         try:
             # Check if the table already exists
-            res = self.query("SHOW TABLES")
+            res,status = self.query("SHOW TABLES")
+            if status != 200:
+                    return res, status
+            col_config = ''
             if tabname not in [r[0] for r in res]:
                 # Map data types
                 dmap = {'Number': 'INT', 'String': 'VARCHAR(32)'}
-
-                # Construct column configuration
-                col_config = ', '.join([f"{c} {dmap[d]}" for c, d in zip(columns, dtypes)])
-
-                # Execute SQL query to create the table
-                self.query(f"CREATE TABLE {tabname} (id INT AUTO_INCREMENT PRIMARY KEY, {col_config})")
-
+                for c,d in zip(columns,dtypes):
+                    if c == columns[0]:
+                        col_config+=f", {c} {dmap[d]} UNIQUE"
+                    else:
+                        col_config+=f", {c} {dmap[d]}"
+                
+            
+            # Execute SQL query to create the table
+            res,status = self.query(f"CREATE TABLE {tabname} (ID INT AUTO_INCREMENT {col_config}, PRIMARY KEY (ID,{columns[0]}));")
+            if status != 200:
+                    return res, status
             return tabname,200
         except Exception as e:
             return e, 500
@@ -90,27 +127,33 @@ class SQLHandler:
 
 
     def Get_range(self,table_name,low, high, col):
+        
         try:
             # Execute SQL query to retrieve entries within the specified range
-            rows = self.query(f"SELECT {col} FROM {table_name} WHERE {col}>={low} AND {col}<{high}")
-
+            res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`>={low} AND `{col}`<{high}")
+            if status != 200:
+                    return res, status
             # Check if any rows were returned
-            if len(rows) == 0:
-                raise KeyError(f"No entries found where {col} is in the range [{low}, {high})")
+            if len(res) == 0:
+                return "No matching entries found",404
             else:
                 # Return the list of values from the query result
-                return [row[0] for row in rows],200
+                return res,200
         except Exception as e:
             return e, 500
 
 
     def Delete_entry(self,table_name,idx,col):
         try:
-            res = self.query(f"DELETE FROM {table_name} WHERE {col}={idx}")
-            if res.rowcount > 0:
-                return "Entry deleted successfully",200
+            res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`={idx}")
+            print(res)
+
+            res,status = self.query(f"DELETE FROM {table_name} WHERE `{col}`={idx};")
+            if status != 200:
+                return res, status
             else:
-                return "No matching entry found for deletion",404
+                return res, status
+
         except Exception as e:
             return e,500
 
@@ -131,14 +174,11 @@ class SQLHandler:
             update_query_str = ', '.join(update_queries)
 
             # Execute the update query
-            res = self.query(f"UPDATE {table_name} SET {update_query_str} WHERE Stud_id={Stud_id}")
-
-            # Check if any row was affected (updated)
-            if res.rowcount > 0:
-                return "Entry updated successfully",200
-            else:
-                return "No matching entry found for update",404
-
+            res,status = self.query(f"UPDATE {table_name} SET {update_query_str} WHERE Stud_id={Stud_id}")
+            if status != 200:
+                    return res, status
+            
+            return "Entry updated successfully",200
         except Exception as e:
             return e,500
 
@@ -154,7 +194,7 @@ class SQLHandler:
                     v_reduced = 'NULL' if np.isnan(v) else v
                     row_str += f", {v_reduced}"
             
-            res = self.query(f"INSERT INTO {table_name} VALUES ({row_str})")
+            res,status = self.query(f"INSERT INTO {table_name} VALUES ({row_str})")
             
             return "Successfully inserted {row}", 200
         except Exception as e:
