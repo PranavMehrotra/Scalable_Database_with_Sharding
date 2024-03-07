@@ -6,7 +6,7 @@ deploy: clean
 
 install: build servers
 
-build:
+build: deepclean
 	sudo docker-compose build
 
 servers:

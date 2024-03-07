@@ -37,7 +37,7 @@ class HeartBeat(threading.Thread):
         while True:
             # Check if the thread is stopped
             if self.stopped():
-                print("heartbeat: Stopping heartbeat thread for server: ", server_name)
+                print("heartbeat: Stopping heartbeat thread for server: ", server_name, flush=True)
                 return
             # print("heartbeat: Starting a session!")
             # with aiohttp.ClientSession() as session:
@@ -55,7 +55,7 @@ class HeartBeat(threading.Thread):
                     if cntr >= 2:
                         # Check if the thread is stopped
                         if self.stopped():
-                            print("heartbeat: Stopping heartbeat thread for server: ", server_name)
+                            print("heartbeat: Stopping heartbeat thread for server: ", server_name, flush=True)
                             # session.close()
                             return
                         print(f"heartbeat: Server {server_name} is down!")
@@ -85,7 +85,7 @@ class HeartBeat(threading.Thread):
                     print(f"heartbeat: Error: {e}")
                 # Check if the thread is stopped
                     if self.stopped():
-                        print("heartbeat: Stopping heartbeat thread for server: ", server_name)
+                        print("heartbeat: Stopping heartbeat thread for server: ", server_name, flush=True)
                         # session.close()
                         return
                     print(f"heartbeat: Server {server_name} is down!")
