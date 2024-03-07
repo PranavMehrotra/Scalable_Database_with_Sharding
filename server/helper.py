@@ -1,28 +1,36 @@
 import os
 import numpy as np
-import pandas as pd
 import mysql.connector
-from multiprocessing.dummy import Pool
+import time
 
 class SQLHandler:
-    def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database'):
-        self.jobrunner=Pool(1)
+    def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database', max_retries=5):
         self.host=host
         self.user=user
         self.password=password
         self.db=db
+        self.max_retries = max_retries
 
     def connect(self):
         connected=False
+        attemps = 0
         while not connected:
             try:
+                print(f"Attempt {attemps+1}/{self.max_retries} to connect to the server...")
                 self.mydb = mysql.connector.connect(host=self.host,user=self.user,password=self.password)
                 self.Use_database(self.db)
                 connected=True
                 print("MYSQL server connected.")
-            except Exception:
-                pass
-        return "Connected", 200
+                return "Connected", 200
+            
+            except Exception as e:
+                if attemps == self.max_retries-1:
+                    return f"Error while connecting to the server: {e}", 500
+            
+            attemps += 1
+            # Wait for 0.1 seconds before retrying
+            time.sleep(0.1)
+        
     
     def disconnect(self):
         connected = True
@@ -85,7 +93,9 @@ class SQLHandler:
                 res,status = self.query(f"DROP DATABASE {dbname}")
                 if status != 200:
                     return res, status
-                
+            else:
+                return f"Database with name {dbname} does not exist in the server",404    
+        
             return "Successfully dropped database",200
         except Exception as e:
             return e, 500
