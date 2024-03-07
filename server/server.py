@@ -5,20 +5,18 @@ from manager import Manager
 import json
 
 mgr = Manager()
-# Initialize server_id as an empty string (will be set later)
 server_id = ""
 
 async def config(request):
     try:
         print("Config endpoint called")
-        request_json = await request.json()  # Extract JSON data from request
+        request_json = await request.json()  
         message, status = mgr.Config_database(request_json)
 
         if status == 200:
             shards = request_json.get('shards', [])
             message = ", ".join([f"{server_id}:{shard}" for shard in shards]) + " configured"
             
-            # Construct the JSON response
             response_json = {
                 "message": message,
                 "status": "success"
@@ -34,24 +32,21 @@ async def config(request):
         return web.json_response(response_json, status=status)
 
     except Exception as e:
-        print(f"Error in Config endpoint: {str(e)}")
+        print(f"Server: Error in Config endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
     
-# Define an asynchronous function for handling the heartbeat endpoint
 async def heartbeat(request):
     try:
-        # Return a simple 200 OK response
         return web.Response(status=200)
     
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
-        print(f"Error in heartbeat endpoint: {str(e)}")
+        print(f"Server: Error in heartbeat endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def copy_database(request):
     try:
         print("Copy endpoint called")
-        request_json = await request.json()  # Extract JSON data from request       
+        request_json = await request.json()         
         database_copy, status = mgr.Copy_database(request_json)
         
         if status == 200:
@@ -69,22 +64,19 @@ async def copy_database(request):
                 "error": message,
                 "status": "failure"
             }
-
-        # Return a JSON response with the database copy and the corresponding status code
         return web.json_response(response_json, status=status)
     
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
-        print(f"Error in copy endpoint: {str(e)}")
+        
+        print(f"Server: Error in copy endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def read_database(request):
     try:
         print("Read endpoint called")
-        request_json = await request.json()  # Extract JSON data from request
+        request_json = await request.json()  
         database_entry, status = mgr.Read_database(request_json)
         
-     
         if status==200:
             umodified_list = [(item[1], item[2], item[3]) for item in database_entry]
             response_data = {
@@ -92,7 +84,7 @@ async def read_database(request):
                     "status": "success"
                 }
         else:
-            message = umodified_list
+            message = database_entry
             response_data = {
                     "error": message,
                     "status": "failure"
@@ -101,25 +93,28 @@ async def read_database(request):
         return web.json_response(response_data, status=status)
    
     except Exception as e:
-        
-        print(f"Error in read endpoint: {str(e)}")
+    
+        print(f"Server: Error in read endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def write_database(request):
+    
     try:
         print("Write endpoint called")
-        request_json = await request.json()  # Extract JSON data from request
-        message, status = mgr.Write_database(request_json)
+        request_json = await request.json()  
+        message, status,id = mgr.Write_database(request_json)
         
         if status == 200:
             response_data = {
                     "message": message,
+                    "current_idx":id,
                     "status": "success"
                 }
             
         else:
             response_data = {
                     "error": message,
+                    "current_idx":id,
                     "status": "failure"
                 }
             
@@ -127,14 +122,14 @@ async def write_database(request):
     
     except Exception as e:
         
-        print(f"Error in write endpoint: {str(e)}")
+        print(f"Server: Error in write endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)  
 
 async def update(request):
     
     try:
         print("Update endpoint called")
-        request_json = await request.json()  # Extract JSON data from request
+        request_json = await request.json()  
         stud_id = request_json.get("Stud_id")
         message, status = mgr.Update_database(request_json)
     
@@ -154,13 +149,14 @@ async def update(request):
         
     except Exception as e:
         
-        print(f"Error in update endpoint: {str(e)}")
+        print(f"Server: Error in update endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def del_database(request):
+    
     try:
         print("Delete endpoint called")
-        request_json = await request.json()  # Extract JSON data from request
+        request_json = await request.json()  
         stud_id = request_json.get("Stud_id")
         message, status = mgr.Delete_database(request_json)
 
@@ -180,12 +176,10 @@ async def del_database(request):
    
     except Exception as e:
         
-        print(f"Error in delete endpoint: {str(e)}")
+        print(f"Server: Error in delete endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
-# Define a synchronous function for handling requests to unknown endpoints
 async def not_found(request):
-    # Return a 400 Bad Request response with a plain text message
     return web.Response(text="Not Found", status=400)
 
 

@@ -48,12 +48,12 @@ class SQLHandler:
         return "Disconnected", 200
     
     def query(self, sql):
-        print(sql)
+        
         try:
             cursor = self.mydb.cursor()
             cursor.execute(sql)
             res=cursor.fetchall()
-            print(sql, res)
+            # print(sql, res)
             cursor.close()
             self.mydb.commit()
             return res,200
@@ -105,7 +105,8 @@ class SQLHandler:
 
     def Get_table_rows(self, table_name):
         try:
-            res,status = self.query(f"SELECT * FROM {table_name}")
+            res,status = self.query(f"SELECT * FROM {table_name};")
+            
             if status != 200:
                     return res, status
             return res,200
@@ -115,7 +116,7 @@ class SQLHandler:
     def Create_table(self, tabname, columns, dtypes):
         try:
             # Check if the table already exists
-            res,status = self.query("SHOW TABLES")
+            res,status = self.query("SHOW TABLES;")
             if status != 200:
                 return res, status
             col_config = ''
@@ -169,7 +170,7 @@ class SQLHandler:
             return e,500
 
 
-    def Update_database(self,table_name,Stud_id,updated_val):
+    def Update_database(self,table_name,Stud_id,updated_val,col):
         try:
             res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`={Stud_id}")
             if res == []:
@@ -204,7 +205,6 @@ class SQLHandler:
             row_str = ''
             
             for v in row:
-                print(type(v))
                 if 'Stud_id' not in v.keys():
                     return "Stud_id not found", 400
                 if 'Stud_name' not in v.keys():
