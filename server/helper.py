@@ -10,6 +10,7 @@ class SQLHandler:
         self.password=password
         self.db=db
         self.max_retries = max_retries
+        self.connected = False
 
     def connect(self):
         connected=False
@@ -20,6 +21,7 @@ class SQLHandler:
                 self.mydb = mysql.connector.connect(host=self.host,user=self.user,password=self.password)
                 self.Use_database(self.db)
                 connected=True
+                self.connected = True
                 print("MYSQL server connected.")
                 return "Connected", 200
             
@@ -51,6 +53,7 @@ class SQLHandler:
             cursor = self.mydb.cursor()
             cursor.execute(sql)
             res=cursor.fetchall()
+            print(sql, res)
             cursor.close()
             self.mydb.commit()
             return res,200
@@ -114,7 +117,7 @@ class SQLHandler:
             # Check if the table already exists
             res,status = self.query("SHOW TABLES")
             if status != 200:
-                    return res, status
+                return res, status
             col_config = ''
             if tabname not in [r[0] for r in res]:
                 # Map data types
@@ -125,15 +128,14 @@ class SQLHandler:
                     else:
                         col_config+=f", {c} {dmap[d]}"
                 
-            
-            # Execute SQL query to create the table
-            res,status = self.query(f"CREATE TABLE {tabname} (ID INT AUTO_INCREMENT {col_config}, PRIMARY KEY (ID,{columns[0]}));")
-            if status != 200:
+                # Execute SQL query to create the table
+                res,status = self.query(f"CREATE TABLE {tabname} (ID INT AUTO_INCREMENT {col_config}, PRIMARY KEY (ID,{columns[0]}));")
+                if status != 200:
                     return res, status
+                
             return tabname,200
         except Exception as e:
             return e, 500
-
 
 
     def Get_range(self,table_name,low, high, col):
@@ -156,20 +158,23 @@ class SQLHandler:
     def Delete_entry(self,table_name,idx,col):
         try:
             res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`={idx}")
-            print(res)
-
+            if res == []:
+                return "No matching entries found",404
             res,status = self.query(f"DELETE FROM {table_name} WHERE `{col}`={idx};")
             if status != 200:
                 return res, status
             else:
                 return res, status
-
         except Exception as e:
             return e,500
 
 
     def Update_database(self,table_name,Stud_id,updated_val):
         try:
+            res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`={Stud_id}")
+            if res == []:
+                return "No matching entries found",404
+            
             # Iterate through the key-value pairs of the dictionary
             update_queries = []
             for col, val in updated_val.items():
@@ -192,21 +197,29 @@ class SQLHandler:
         except Exception as e:
             return e,500
 
-    def Insert(self,table_name,row):
+    def Insert(self,table_name,row,schema):
     
         try:
-            row_str = '0'
+            
+            row_str = ''
             
             for v in row:
-                if isinstance(v, str):
-                    row_str += f", '{v}'"
-                else:
-                    v_reduced = 'NULL' if np.isnan(v) else v
-                    row_str += f", {v_reduced}"
+                print(type(v))
+                if 'Stud_id' not in v.keys():
+                    return "Stud_id not found", 400
+                if 'Stud_name' not in v.keys():
+                    return "Stud_name not found", 400
+                if 'Stud_marks' not in v.keys():
+                    return "Stud_marks not found", 400
+
+                row_str += f"({v['Stud_id']},'{v['Stud_name']}',{v['Stud_marks']}),"
+            row_str = row_str[:-1]
             
-            res,status = self.query(f"INSERT INTO {table_name} VALUES ({row_str})")
+            res,status = self.query(f"INSERT INTO {table_name} {schema} VALUES {row_str};")
+            if status != 200:
+                return res, status
             
-            return "Successfully inserted {row}", 200
+            return f"Successfully inserted {row_str}", 200
         except Exception as e:
             return e, 500
 

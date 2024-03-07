@@ -12,24 +12,10 @@ async def config(request):
     try:
         print("Config endpoint called")
         request_json = await request.json()  # Extract JSON data from request
-        if 'shards' not in request_json:
-            return web.json_response({"error": "'shards' field missing in request"}, status=400)
-        
-        # Additional sanity checks for schema consistency
-        schema = request_json.get('schema', {})
-        columns = schema.get('columns', [])
-        dtypes = schema.get('dtypes', [])
-        
-        # Check if the number of columns matches the number of data types
-        if len(columns) != len(dtypes):
-            return web.json_response({"error": "Number of columns and dtypes don't match"}, status=400)
-        
         message, status = mgr.Config_database(request_json)
 
         if status == 200:
-            # Extract shards from the request JSON
             shards = request_json.get('shards', [])
-            # Construct the response message
             message = ", ".join([f"{server_id}:{shard}" for shard in shards]) + " configured"
             
             # Construct the JSON response
@@ -38,16 +24,16 @@ async def config(request):
                 "status": "success"
             }
             
-            
-            # Return the JSON response with status code 200
-            return web.json_response(response_json, status=200)
-        
         else:
-            print(f"Error in Config endpoint: {str(message)}")
-            return web.json_response({"error": f"str{message}"}, status=status)
+           
+            response_json = {
+                "error": str(message),
+                "status": "failure"
+            }
+        
+        return web.json_response(response_json, status=status)
 
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
         print(f"Error in Config endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
     
@@ -62,162 +48,140 @@ async def heartbeat(request):
         print(f"Error in heartbeat endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
-
 async def copy_database(request):
     try:
-        request_json = await request.json()  # Extract JSON data from request
-        if 'shards' not in request_json:
-            return web.json_response({"error": "'shards' field missing in request"}, status=400)
-        
-        # Call the Copy_database method of the Manager class
+        print("Copy endpoint called")
+        request_json = await request.json()  # Extract JSON data from request       
         database_copy, status = mgr.Copy_database(request_json)
         
-        
-        # Construct the response JSON
-        response_json = {}
-        
-        # Add database copy for each shard
-        for shard_name, shard_data in database_copy.items():
-            updated_shard_data = [[row[1:], ] for row in shard_data]
-            response_json[shard_name] = updated_shard_data
-        
-        # Add the status
-        response_json["status"] = "success"
-        
         if status == 200:
-            # Return a JSON response with the database copy and the corresponding status code
-            return web.json_response(response_json, status=status)
+            response_json = {}
+            
+            for shard_name, shard_data in database_copy.items():
+                updated_shard_data = [[row[1:], ] for row in shard_data]
+                response_json[shard_name] = updated_shard_data
+            
+            response_json["status"] = "success"
+            
         else:
-            return web.json_response({"error": "Internal Server Error"}, status=500)
+            message = database_copy
+            response_json = {
+                "error": message,
+                "status": "failure"
+            }
+
+        # Return a JSON response with the database copy and the corresponding status code
+        return web.json_response(response_json, status=status)
     
     except Exception as e:
         # Log the exception and return an error response if an exception occurs
         print(f"Error in copy endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
- 
 
 async def read_database(request):
     try:
+        print("Read endpoint called")
         request_json = await request.json()  # Extract JSON data from request
-        if 'shard' not in request_json:
-            return web.json_response({"error": "'shard' field missing in request"}, status=400)
-    
-        stud_id_obj = request_json["Stud_id"]
-
-        if "low" not in stud_id_obj or "high" not in stud_id_obj:
-            return web.json_response({"error": "Both low and high values are required"}, status=400)
+        database_entry, status = mgr.Read_database(request_json)
         
-        database_entry, status = mgr.Read_database(request_json['shard'],stud_id_obj["low"], stud_id_obj["high"])
-        
-        umodified_list = [(item[1], item[2], item[3]) for item in database_entry]
-
-        
-        response_data = {
-                "data": umodified_list,
-                "status": "success"
-            }
+     
         if status==200:
-            return web.json_response(response_data, status=status)
+            umodified_list = [(item[1], item[2], item[3]) for item in database_entry]
+            response_data = {
+                    "data": umodified_list,
+                    "status": "success"
+                }
         else:
-            return web.json_response({"error": {database_entry}}, status=status)
+            message = umodified_list
+            response_data = {
+                    "error": message,
+                    "status": "failure"
+                }
+    
+        return web.json_response(response_data, status=status)
+   
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
+        
         print(f"Error in read endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def write_database(request):
     try:
+        print("Write endpoint called")
         request_json = await request.json()  # Extract JSON data from request
-        if 'shard' not in request_json:
-            return web.json_response({"error": "'shard' field missing in request"}, status=400)
+        message, status = mgr.Write_database(request_json)
         
-        message, status = mgr.Write_database(request_json['shard'],request_json['data'])
-        response_data = {
-                "message": message,
-                "status": "success"
-            }
-        return web.json_response(response_data, status=status)
-    
-    except Exception as e:
-        # Log the exception and return an error response if an exception occurs
-        print(f"Error in write endpoint: {str(e)}")
-        return web.json_response({"error": "Internal Server Error"}, status=500)
-    
-
-async def update(request):
-    try:
-        request_json = await request.json()  # Extract JSON data from request
-        if 'shard' not in request_json:
-            return web.json_response({"error": "'shard' field missing in request"}, status=400)
-        
-        if 'Stud_id' not in request_json:
-            return web.json_response({"error": "'Stud_id' field missing in request"}, status=400)
-        
-        if 'data' not in request_json:
-            return web.json_response({"error": "'data' field missing in request"}, status=400)
-        
-        stud_id = request_json.get("Stud_id")
-        data = request_json.get("data")
-
-        # Check if the 'Stud_id' in the payload matches the 'Stud_id' in the 'data' object
-        if stud_id == data["Stud_id"]:
-            # Call mgr.Read_database function
-            message, status = mgr.Update_database(request_json['shard'], stud_id,data)
-            if status == 200:
-                response_data = {
-                    "message": f"Data entry for Stud_id:{stud_id} updated",
+        if status == 200:
+            response_data = {
+                    "message": message,
                     "status": "success"
                 }
-                return web.json_response(response_data, status=status)
-            else:
-                print(1)
-                response_data = {
-                    "message": f"{str(message)}",
+            
+        else:
+            response_data = {
+                    "error": message,
                     "status": "failure"
                 }
-                return web.json_response(response_data, status=status)
-
-        else:
-            return web.json_response({"error": "Stud_id in 'data' does not match Stud_id in payload"}, status=400)
+            
+        return web.json_response(response_data, status=status)  
+    
+    except Exception as e:
         
+        print(f"Error in write endpoint: {str(e)}")
+        return web.json_response({"error": "Internal Server Error"}, status=500)  
+
+async def update(request):
+    
+    try:
+        print("Update endpoint called")
+        request_json = await request.json()  # Extract JSON data from request
+        stud_id = request_json.get("Stud_id")
+        message, status = mgr.Update_database(request_json)
+    
+        if status == 200:
+            response_data = {
+                "message": f"Data entry for Stud_id:{stud_id} updated",
+                "status": "success"
+            }
+            return web.json_response(response_data, status=status)
+        
+        else:
+            response_data = {
+                "message": f"{str(message)}",
+                "status": "failure"
+            }
+            return web.json_response(response_data, status=status)        
         
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
+        
         print(f"Error in update endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
 async def del_database(request):
     try:
+        print("Delete endpoint called")
         request_json = await request.json()  # Extract JSON data from request
-        if 'shard' not in request_json:
-            return web.json_response({"error": "'shard' field missing in request"}, status=400)
-        
-        if 'Stud_id' not in request_json:
-            return web.json_response({"error": "'Stud_id' field missing in request"}, status=400)
-        
         stud_id = request_json.get("Stud_id")
-        message, status = mgr.Delete_database(request_json['shard'],request_json['Stud_id'])
-        
+        message, status = mgr.Delete_database(request_json)
+
         if status==200:
             response_data = {
                 "message": f"Data entry with Stud_id:{stud_id} removed",
                 "status": "success"
             }
-            
-            return web.json_response(response_data, status=status)
+        
         else:
             response_data = {
-                "message": f'{str(message)}',
+                "error": f'{str(message)}',
                 "status": "failure"
-            }
-            
-            return web.json_response(response_data, status=status)
+            }    
+        
+        return web.json_response(response_data, status=status)
    
     except Exception as e:
-        # Log the exception and return an error response if an exception occurs
+        
         print(f"Error in delete endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
-   
 
 # Define a synchronous function for handling requests to unknown endpoints
 async def not_found(request):
