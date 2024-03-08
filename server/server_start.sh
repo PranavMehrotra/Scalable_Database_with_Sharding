@@ -1,12 +1,8 @@
 #!/bin/bash
 
-
 echo "Start mysqld ..."
 service mariadb start
 
-
-# server_id=$SERVER_ID
-# echo "Server ID: $server_id"
 cntr=0
 until mysql -u root -e "SHOW DATABASES; ALTER USER 'root'@'localhost' IDENTIFIED BY '$SERVER_ID@123';" ; do
     sleep 1
