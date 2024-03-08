@@ -4,7 +4,7 @@ import mysql.connector
 import time
 
 class SQLHandler:
-    def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database', max_retries=5):
+    def __init__(self,host='localhost',user='root',password='root@123',db='server_database', max_retries=5):
         self.host=host
         self.user=user
         self.password=password
