@@ -4,7 +4,7 @@ import json
 class Manager:
     def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database'):
         self.sql_handler=SQLHandler(host=host,user=user,password=password,db=db)
-        
+        self.schema = ''
         
     def Config_database(self,config):
         try:
@@ -29,6 +29,8 @@ class Manager:
             columns = schema.get('columns', [])
             dtypes = schema.get('dtypes', [])
             
+            
+            self.schema = set(columns)
             if len(columns) != len(dtypes):
                 return "Number of columns and dtypes don't match", 400
 
@@ -139,10 +141,28 @@ class Manager:
             if(curr_idx!=valid_idx+1):                
                 return "Invalid index",400,valid_idx+1
             
-            schema = '(Stud_id,Stud_name,Stud_marks)'   ### Remove Hardcode
-            ### Modify data(For loop) and check with self.schema(Set of Strings), if row.keys() != self.schema: continue
-            ### Else, insert in row_string
-            message, status = self.sql_handler.Insert(tablename, data,schema)
+            row_str = ''
+            
+            for v in data:
+                missing_columns = self.schema - set(v.keys())
+
+                if missing_columns:
+                    missing_column = missing_columns.pop()  # Get the first missing column
+                    return f"{missing_column} not found", 400
+                
+                row = ''
+                for k in self.schema:
+                    if type(v[k]) == str:
+                        row += f"'{v[k]}',"
+                    else:
+                        row += f"{v[k]},"
+                row = row[:-1]
+                row_str += f"({row}),"
+            row_str = row_str[:-1]
+             
+            
+            schema = (',').join(self.schema)
+            message, status = self.sql_handler.Insert(tablename, row_str,schema)
             
             if status != 200:    
                 return message, status,valid_idx+1

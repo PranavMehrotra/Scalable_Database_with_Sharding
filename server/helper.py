@@ -198,24 +198,9 @@ class SQLHandler:
         except Exception as e:
             return e,500
 
-    def Insert(self,table_name,row,schema):  ### Remove Hardcode, check in manager.py, with self.schema(Set of strings). Check whether keys of dictionary are matching with self.schema
-                                                ### Make row_str in manager.py and pass it to this function
+    def Insert(self,table_name,row_str,schema):  
         try:
-            
-            row_str = ''
-            
-            for v in row:
-                if 'Stud_id' not in v.keys():
-                    return "Stud_id not found", 400
-                if 'Stud_name' not in v.keys():
-                    return "Stud_name not found", 400
-                if 'Stud_marks' not in v.keys():
-                    return "Stud_marks not found", 400
-
-                row_str += f"({v['Stud_id']},'{v['Stud_name']}',{v['Stud_marks']}),"
-            row_str = row_str[:-1]
-            
-            res,status = self.query(f"INSERT INTO {table_name} {schema} VALUES {row_str};")
+            res,status = self.query(f"INSERT INTO {table_name} ({schema}) VALUES {row_str};")
             if status != 200:
                 return res, status
             

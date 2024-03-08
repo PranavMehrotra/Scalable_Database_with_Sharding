@@ -94,14 +94,14 @@ async def main():
     # }
     # await send_json_request(config_json)
 
-    # config_json = {
-    #     "schema": {
-    #         "columns": ["Stud_id", "Stud_name", "Stud_marks"],
-    #         "dtypes": ["Number", "String", "Number"]
-    #     },
-    #     "shards": ["sh1","sh2","sh3"]
-    # }
-    # await send_json_request(config_json)
+    config_json = {
+        "schema": {
+            "columns": ["Stud_id", "Stud_name", "Stud_marks"],
+            "dtypes": ["Number", "String", "Number"]
+        },
+        "shards": ["sh1","sh2","sh3"]
+    }
+    await send_json_request(config_json)
 
     # write_json = {
     # "shard":"sh3",
@@ -110,19 +110,19 @@ async def main():
     # }
     # await write_shard(write_json)
 
-    # write_json = {
-    # "shard":"sh3",
-    # "curr_idx": 1,
-    # "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
-    # }
-    # await write_shard(write_json)
+    write_json = {
+    "shard":"sh3",
+    "curr_idx": 1,
+    "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
+    }
+    await write_shard(write_json)
 
-    # write_json = {
-    # "shard":"sh1",
-    # "curr_idx": 1,
-    # "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
-    # }
-    # await write_shard(write_json)
+    write_json = {
+    "shard":"sh1",
+    "curr_idx": 1,
+    "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
+    }
+    await write_shard(write_json)
 
 
     # copy_json = {
@@ -130,17 +130,17 @@ async def main():
     # }
     # await send_copy(copy_json)
 
-    # copy_json = {
-    #     "shards": ["sh3", "sh1"]
-    # }
-    # await send_copy(copy_json)
-
-
-    read_json = {
-        "shard": "sh3",
-        "Stud_id":{ "low": 10, "high": 11}
+    copy_json = {
+        "shards": ["sh3", "sh1"]
     }
-    await read_shard(read_json)
+    await send_copy(copy_json)
+
+
+    # read_json = {
+    #     "shard": "sh3",
+    #     "Stud_id":{ "low": 10, "high": 11}
+    # }
+    # await read_shard(read_json)
 
 
     # read_json = {
@@ -158,11 +158,11 @@ async def main():
     # await read_shard(read_json)
 
 
-    # read_json = {
-    #     "shard": "sh3",
-    #     "Stud_id":{ "low": 40, "high": 100}
-    # }
-    # await read_shard(read_json)
+    read_json = {
+        "shard": "sh3",
+        "Stud_id":{ "low": 40, "high": 100}
+    }
+    await read_shard(read_json)
 
 
     # read_json = {
@@ -173,12 +173,12 @@ async def main():
 
 
     
-    # update_json = {
-    #     "shard":"sh1",
-    #     "Stud_id":65,
-    #     "data": {"Stud_id":65,"Stud_name":'saransh_sharma',"Stud_marks":300} 
-    #     }
-    # await update_shard(update_json)
+    update_json = {
+        "shard":"sh1",
+        "Stud_id":65,
+        "data": {"Stud_id":65,"Stud_name":'saransh_sharma',"Stud_marks":300} 
+        }
+    await update_shard(update_json)
 
 
     # update_json = {
@@ -210,11 +210,11 @@ async def main():
     #     }
     # await delete_shard(del_json)
     
-    # del_json = {
-    #     "shard":"sh1",
-    #     "Stud_id":37,
-    #     }
-    # await delete_shard(del_json)
+    del_json = {
+        "shard":"sh1",
+        "Stud_id":37,
+        }
+    await delete_shard(del_json)
 
 if __name__ == '__main__':
     asyncio.run(main())
