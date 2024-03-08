@@ -4,12 +4,13 @@ import datetime
 from helper import SQLHandler
 
 
-sql_handler = SQLHandler(max_retries=5)
+sql_handler = SQLHandler()
 
 try:
     print("Connecting to database...")
     error, status=sql_handler.connect()
     if status!=200:
+        print(status, flush=True)
         raise Exception(error)
     # res = sql_handler.query("USE server_database;")
     # res,status = sql_handler.query(f"UPDATE sh3 SET Stud_marks=40 WHERE Stud_id=65;")
