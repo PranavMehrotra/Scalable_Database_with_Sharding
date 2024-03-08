@@ -18,12 +18,18 @@ ARG server_password=root@123
 
 # add group and user for mysql
 # RUN groupadd -r $server_id && useradd -r -g $server_id $server_id
+RUN export DEBIAN_FRONTEND=noninteractive
 
+# RUN echo "mariadb-server mariadb-server/root_password password root@123" | \
+#     debconf-set-selections
+# RUN echo "mariadb-server mariadb-server/root_password_again password root@123" | \
+#     debconf-set-selections
 
-RUN echo "mariadb-server mariadb-server/root_password password root@123" | \
-    debconf-set-selections
-RUN echo "mariadb-server mariadb-server/root_password_again password root@123" | \
-    debconf-set-selections
+RUN ["/bin/bash", "-c", "debconf-set-selections <<< 'mariadb-server-10.3 mysql-server/root_password password rootpass'"]
+RUN ["/bin/bash", "-c", "debconf-set-selections <<< 'mariadb-server-10.3 mysql-server/root_password_again password rootpass'"]
+
+# RUN debconf-set-selections <<< 'mysql-server mysql-server/root_password password root@123'
+# RUN debconf-set-selections <<< 'mysql-server mysql-server/root_password_again password root@123'
 
 # Download .deb file for mysql
 # RUN apt-get install -y wget

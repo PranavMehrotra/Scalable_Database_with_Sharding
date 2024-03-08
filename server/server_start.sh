@@ -1,6 +1,6 @@
 #!/bin/bash
 
-SQLFLOW_MYSQL_HOST=${SQLFLOW_MYSQL_HOST:-0.0.0.0}
+# SQLFLOW_MYSQL_HOST=${SQLFLOW_MYSQL_HOST:-0.0.0.0}
 
 echo "Start mysqld ..."
 sed -i "s/.*bind-address.*/bind-address = ${SQLFLOW_MYSQL_HOST}/" \
@@ -11,9 +11,7 @@ service mariadb start
 # sleep 1
 echo "Sleep until MySQL server is ready ..."
 cntr=0
-until echo "root@123" |  mysql -u root -p \
-            --host "$SQLFLOW_MYSQL_HOST" \
-            --port "$SQLFLOW_MYSQL_PORT" \
+until mysql -u root -p \
             -e ";" ; do
     sleep 1
     read -r -p "Can't connect, retrying..."
