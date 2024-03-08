@@ -4,7 +4,7 @@ import datetime
 from helper import SQLHandler
 
 
-sql_handler = SQLHandler()
+sql_handler = SQLHandler(host='localhost',user='root',password='123654@123')
 
 try:
     print("Connecting to database...")
