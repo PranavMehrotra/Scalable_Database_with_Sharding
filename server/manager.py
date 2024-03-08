@@ -35,11 +35,10 @@ class Manager:
             if schema and columns and dtypes and shards:    
                 for shard in shards:
                     message, status = self.sql_handler.Create_table(shard, columns, dtypes)
-                
-                if status == 200:
-                    return "Tables created successfully", 200
-                else: return message, status
-            
+                    if status != 200:
+                        return message, status
+                    
+                return "Tables created", 200
             else:
                 return "Invalid JSON format", 400
         
@@ -140,7 +139,9 @@ class Manager:
             if(curr_idx!=valid_idx+1):                
                 return "Invalid index",400,valid_idx+1
             
-            schema = '(Stud_id,Stud_name,Stud_marks)'
+            schema = '(Stud_id,Stud_name,Stud_marks)'   ### Remove Hardcode
+            ### Modify data(For loop) and check with self.schema(Set of Strings), if row.keys() != self.schema: continue
+            ### Else, insert in row_string
             message, status = self.sql_handler.Insert(tablename, data,schema)
             
             if status != 200:    

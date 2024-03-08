@@ -4,7 +4,7 @@ import os
 from manager import Manager
 import json
 
-mgr = Manager()
+mgr = Manager()  ### Add user and password here of SQL server
 server_id = ""
 
 async def config(request):

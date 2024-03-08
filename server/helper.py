@@ -198,8 +198,8 @@ class SQLHandler:
         except Exception as e:
             return e,500
 
-    def Insert(self,table_name,row,schema):
-    
+    def Insert(self,table_name,row,schema):  ### Remove Hardcode, check in manager.py, with self.schema(Set of strings). Check whether keys of dictionary are matching with self.schema
+                                                ### Make row_str in manager.py and pass it to this function
         try:
             
             row_str = ''
