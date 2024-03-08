@@ -1,17 +1,10 @@
 FROM python:latest
 
-COPY . /load_balancer/
-
-# Set the working directory
-WORKDIR /load_balancer/
 
 RUN apt-get update
 RUN apt-get install -y python3
 RUN apt-get install -y python3-pip
 
-
-RUN pip install -r requirements.txt
-RUN chmod +x main.py
 
 # RUN apt-get update
 RUN apt-get -y install sudo
@@ -42,4 +35,14 @@ USER $USER
 
 ENV HOME=/home/$USER
 
-CMD ["python", "main.py"]
+# Set the working directory
+WORKDIR /load_balancer/
+
+COPY requirements.txt /load_balancer/
+
+RUN pip install -r requirements.txt
+
+COPY . /load_balancer/
+
+# RUN chmod +x main.py
+CMD ["python3", "main.py"]
