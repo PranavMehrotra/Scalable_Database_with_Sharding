@@ -3,6 +3,7 @@ from aiohttp import web
 import os
 from manager import Manager
 import json
+import time
 
 mgr = Manager()  ### Add user and password here of SQL server
 server_id = ""
@@ -206,7 +207,11 @@ def run_server():
 
 # Entry point of the script
 if __name__ == '__main__':
+    print("Starting server...")
+
     # Get the server_id from the environment variable
-    server_id = 'Server0' #os.environ.get("SERVER_ID")
-    # Run the web server
+    server_id = 'Server0' #os.environ.get("SERVER_ID"
+    # # Run the web server
+    print("\nHi.", flush=True)
     run_server()
+
