@@ -14,33 +14,31 @@ from docker_utils import spawn_server_cntnr, kill_server_cntnr
 SLEEP_AFTER_SERVER_ADDITION = 1
 
 class LoadBalancer:
-    def __init__(self, initial_servers: list):
+    def __init__(self):
         
-        # self.servers = {} # dictionary of active servers (key: hostname, value: port)
-        self.servers = set() # set of active servers, no need to store port number, as it is always 5000
+        self.servers = {} # dictionary of active servers (key: hostname, value: port)
         self.rw_lock = RWLock()  # reader-writer lock to protect the self.servers set
         self.socket = None
         self.load_count = {}
         self.load_cnt_lock = RWLock()
-        
-        # spawn the initial set of servers
-        for hostname in initial_servers:
-            done = spawn_server_cntnr(hostname)
-            if not done:
-                print("load_balancer: <Error> Server: '" + hostname + "' could not be spawned!")
-                return
-            self.rw_lock.acquire_writer()
-            # self.servers[hostname] = port
-            self.servers.add(hostname)
-            self.rw_lock.release_writer()
-            # time.sleep(SLEEP_AFTER_SERVER_ADDITION)
+        # # spawn the initial set of servers
+        # for hostname in initial_servers:
+        #     done = spawn_server_cntnr(hostname)
+        #     if not done:
+        #         print("load_balancer: <Error> Server: '" + hostname + "' could not be spawned!")
+        #         return
+        #     self.rw_lock.acquire_writer()
+        #     # self.servers[hostname] = port
+        #     self.servers.add(hostname)
+        #     self.rw_lock.release_writer()
+        #     # time.sleep(SLEEP_AFTER_SERVER_ADDITION)
         
         
         
         # self.consistent_hashing = ConsistentHashing(server_hostnames=initial_servers, num_servers=len(initial_servers))
         self.consistent_hashing: dict[str, ConsistentHashing] = {}
 
-    def add_servers(self, num_add, serv_to_shard: dict):
+    def add_servers(self, num_add, serv_to_shard: dict, should_spawn: bool = True):
         error=""
         # temp_new_servers = set()
         # Make hostnames list unique(basically a set)
@@ -72,16 +70,17 @@ class LoadBalancer:
         
         final_add_server_set = set()  # Use set instead of dictionary for faster additions and subtractions        
         
-        ### TO-D0: Call the server spawning module to spawn the new servers:
-        for server in hostnames:
-            done = spawn_server_cntnr(server) ## function from docker_utils.py
-            ### TO-DO: Add error handling here in case the server could not be spawned
-            if not done:
-                print("load_balancer: <Error> Server: '" + server + "' could not be spawned!")
+        if should_spawn:
+            for server in hostnames:
+                done = spawn_server_cntnr(server) ## function from docker_utils.py
+                ### TO-DO: Add error handling here in case the server could not be spawned
+                if not done:
+                    print("load_balancer: <Error> Server: '" + server + "' could not be spawned!")
 
-            else:     # add the newly spawned server to the dictionary of servers
-                final_add_server_set.add(server)
-
+                else:     # add the newly spawned server to the dictionary of servers
+                    final_add_server_set.add(server)
+        else:
+            final_add_server_set = hostnames
             # time.sleep(SLEEP_AFTER_SERVER_ADDITION)
         
         shard_to_server: dict[str, list] = {}
@@ -104,9 +103,10 @@ class LoadBalancer:
 
         # # add the newly added servers to the dictionary of servers
         self.rw_lock.acquire_writer()
-        for server in new_servers:
-            # self.servers[server] = final_add_server_dict[server] # port number
-            self.servers.add(server)
+        # for server in new_servers:
+        #     # self.servers[server] = final_add_server_dict[server] # port number
+        #     self.servers.add(server)
+        self.servers = self.servers.union(new_servers)
         self.rw_lock.release_writer()
         
         ### TO-DO: For the servers that couldn't be added to the CH module (possibly due to lack of space), remove them from the list of servers to be added
@@ -123,7 +123,9 @@ class LoadBalancer:
         for shard in shards:
             if shard not in self.consistent_hashing:
                 new_shards.append(shard)
+                self.rw_lock.acquire_writer()
                 self.consistent_hashing[shard] = ConsistentHashing(server_hostnames=[], num_servers=0)
+                self.rw_lock.release_writer()
         return new_shards
 
 
