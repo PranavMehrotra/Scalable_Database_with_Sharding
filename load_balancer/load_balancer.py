@@ -40,14 +40,14 @@ class LoadBalancer:
         # self.consistent_hashing = ConsistentHashing(server_hostnames=initial_servers, num_servers=len(initial_servers))
         self.consistent_hashing: dict[str, ConsistentHashing] = {}
 
-    def add_servers(self, num_add, hostnames:list):
+    def add_servers(self, num_add, serv_to_shard: dict):
         error=""
-        temp_new_servers = set()
+        # temp_new_servers = set()
         # Make hostnames list unique(basically a set)
-        hostnames = set(hostnames)
-        if (len(hostnames) > num_add):
-            print("load_balancer: <Error> Length of hostname list is more than newly added instances")
-            error = "<Error> Length of hostname list is more than newly added instances"
+        hostnames = set(serv_to_shard.keys())
+        if (len(hostnames) != num_add):
+            print("load_balancer: <Error> Length of servers dict is not equal to newly added instances")
+            error = "<Error> Length of servers dict is not equal to newly added instances"
             return -1, [], error
             
         else:
@@ -55,25 +55,25 @@ class LoadBalancer:
             for hostname in hostnames:
                 self.rw_lock.acquire_reader()
                 if (hostname in self.servers):
-                    # print("load_balancer: <Error> Hostname: '" + hostname + "' already exists in the active list of servers!") 
                     self.rw_lock.release_reader()
-                    continue
+                    print("load_balancer: <Error> Hostname: '" + hostname + "' already exists in the active list of servers!") 
+                    return -1, [], "<Error> Hostname: '" + hostname + "' already exists in the active list of servers!"
                 self.rw_lock.release_reader()
-                temp_new_servers.add(hostname)
+                # temp_new_servers.add(hostname)
             
-            # add the remaining servers to the list by generating new random hostnames for them
-            for i in range(num_add - len(temp_new_servers)):
-                new_hostname = generate_new_hostname()
-                self.rw_lock.acquire_reader()
-                while (new_hostname in self.servers or new_hostname in temp_new_servers):
-                    new_hostname = generate_new_hostname()
-                self.rw_lock.release_reader()
-                temp_new_servers.add(new_hostname)
+            # # add the remaining servers to the list by generating new random hostnames for them
+            # for i in range(num_add - len(temp_new_servers)):
+            #     new_hostname = generate_new_hostname()
+            #     self.rw_lock.acquire_reader()
+            #     while (new_hostname in self.servers or new_hostname in temp_new_servers):
+            #         new_hostname = generate_new_hostname()
+            #     self.rw_lock.release_reader()
+            #     temp_new_servers.add(new_hostname)
         
         final_add_server_set = set()  # Use set instead of dictionary for faster additions and subtractions        
         
         ### TO-D0: Call the server spawning module to spawn the new servers:
-        for server in temp_new_servers:
+        for server in hostnames:
             done = spawn_server_cntnr(server) ## function from docker_utils.py
             ### TO-DO: Add error handling here in case the server could not be spawned
             if not done:
@@ -83,13 +83,24 @@ class LoadBalancer:
                 final_add_server_set.add(server)
 
             # time.sleep(SLEEP_AFTER_SERVER_ADDITION)
-            
         
-          
+        shard_to_server: dict[str, list] = {}
+        for server in final_add_server_set:
+            for shard in serv_to_shard[server]:
+                if shard in shard_to_server:
+                    shard_to_server[shard].append(server)
+                else:
+                    shard_to_server[shard] = [server]
+        new_servers = set()
+        for shard, servers in shard_to_server.items():
+            if shard in self.consistent_hashing:
+                tem_new_servers = set(self.consistent_hashing[shard].add_servers(servers))
+                new_servers = new_servers.union(tem_new_servers)
+
         # send the temorary list of new servers to be added to the consistent hashing module
         # the consistent hasing module will finally return the list of servers that were finally added
-        new_servers = self.consistent_hashing.add_servers(list(final_add_server_set))
-        new_servers = set(new_servers)
+        # new_servers = self.consistent_hashing.add_servers(list(final_add_server_set))
+        # new_servers = set(new_servers)
 
         # # add the newly added servers to the dictionary of servers
         self.rw_lock.acquire_writer()
@@ -105,8 +116,18 @@ class LoadBalancer:
             
         # final_add_server_dict = {server: final_add_server_dict[server] for server in new_servers}
         
-        return len(new_servers), new_servers, error
+        return len(new_servers), list(new_servers), error
     
+    def add_shards(self, shards: list):
+        new_shards = []
+        for shard in shards:
+            if shard not in self.consistent_hashing:
+                new_shards.append(shard)
+                self.consistent_hashing[shard] = ConsistentHashing(server_hostnames=[], num_servers=0)
+        return new_shards
+
+
+
     def remove_servers(self, num_rem, hostnames:list):
         error = ""
         self.rw_lock.acquire_reader()
@@ -169,10 +190,11 @@ class LoadBalancer:
                     temp_rm_servers = temp_rm_servers.union(set(list(tem_set)[:left]))
                 self.rw_lock.release_reader()
                 
-            
-       # servers_rem_f is the list of servers that were finally removed from CH module
-        servers_rem_f = self.consistent_hashing.remove_servers([server for server in temp_rm_servers])
-        
+        # servers_rem_f = self.consistent_hashing.remove_servers([server for server in temp_rm_servers])
+        servers_rem_f = set()
+        for shard in self.consistent_hashing:
+            tem_servers_rem_f = set(self.consistent_hashing[shard].remove_servers(temp_rm_servers))
+            servers_rem_f = servers_rem_f.union(tem_servers_rem_f)
         # remove the newly removed servers from the dictionary of servers
         # self.rw_lock.acquire_writer()
         # for server in temp_rm_servers:
@@ -199,7 +221,7 @@ class LoadBalancer:
         self.rw_lock.release_writer()
         
         
-        return len(servers_rem_f), servers_rem_f, error 
+        return len(servers_rem_f), list(servers_rem_f), error 
                 
     def list_servers(self):
         self.rw_lock.acquire_reader()
