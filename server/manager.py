@@ -159,15 +159,19 @@ class Manager:
                     missing_column = missing_columns.pop()  # Get the first missing column
                     return f"{missing_column} not found", 400, valid_idx+1
                 
-                row = ''
+                # row = ''
                 ### 1. Why is explicit check for string type required? Can't we just use f"{v[k]},"?
                 ### 2. Make more efficient by using join
-                for k in self.schema:
-                    if type(v[k]) == str:
-                        row += f"'{v[k]}',"
-                    else:
-                        row += f"{v[k]},"
-                row = row[:-1]
+                ## Slow
+                # for k in self.schema:
+                #     if type(v[k]) == str:
+                #         row += f"'{v[k]}',"
+                #     else:
+                #         row += f"{v[k]},"
+                # row = row[:-1]
+
+                ## More efficient way
+                row = ','.join([f"'{v[k]}'" for k in self.schema])
                 row_str += f"({row}),"
             row_str = row_str[:-1]
              
