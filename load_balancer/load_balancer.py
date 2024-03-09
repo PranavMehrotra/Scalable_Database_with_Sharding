@@ -37,7 +37,8 @@ class LoadBalancer:
         
         
         
-        self.consistent_hashing = ConsistentHashing(server_hostnames=initial_servers, num_servers=len(initial_servers))
+        # self.consistent_hashing = ConsistentHashing(server_hostnames=initial_servers, num_servers=len(initial_servers))
+        self.consistent_hashing: dict[str, ConsistentHashing] = {}
 
     def add_servers(self, num_add, hostnames:list):
         error=""
@@ -205,17 +206,31 @@ class LoadBalancer:
         servers_list = list(self.servers)
         self.rw_lock.release_reader()
         return servers_list           
-        
-    def assign_server(self, req_id):
+
+    def assign_server(self, shard_id, req_id):
         self.rw_lock.acquire_reader()
         if (len(self.servers) == 0):
             self.rw_lock.release_reader()
             print("load_balancer: <Error> No active server left. Can't assign any server!")
             return ""
-        server = self.consistent_hashing.get_server(req_id)
+        if (shard_id not in self.consistent_hashing):
+            self.rw_lock.release_reader()
+            print("load_balancer: <Error> Shard: " + str(shard_id) + " does not exist in the consistent hashing module!")
+            return ""
+        server = self.consistent_hashing[shard_id].get_server(req_id)
         self.rw_lock.release_reader()
         return server
-                
+    
+    def list_shard_servers(self, shard_id):
+        self.rw_lock.acquire_reader()
+        if (shard_id not in self.consistent_hashing):
+            print("load_balancer: <Error> Shard: " + str(shard_id) + " does not exist in the consistent hashing module!")
+            self.rw_lock.release_reader()
+            return []
+        servers_list = self.consistent_hashing[shard_id].list_servers()
+        self.rw_lock.release_reader()
+        return servers_list
+
     def increment_server_req_count(self, server):
         self.load_cnt_lock.acquire_writer()
         if (server in self.load_count):

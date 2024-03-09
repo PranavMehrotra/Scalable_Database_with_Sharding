@@ -241,6 +241,12 @@ class ConsistentHashing:
         # print(self.hash_array)
         self.lock.release_reader()
 
+    def list_servers(self):
+        self.lock.acquire_reader()
+        servers = list(self.hostname_to_id.keys())
+        self.lock.release_reader()
+        return servers
+
     def __unique_checker(self):
         # Check if sorted list is unique
         print("consistent_hashing: Checking uniqueness of hash map: ", end="")
