@@ -11,6 +11,8 @@ RANDOM_SEED = 4326
 
 lb : LoadBalancer = ""
 hb_threads = {}
+shardT = {}   # shardT is a dictionary that maps "Stud_id_low" to a list ["Shartd_id", "Shard_size", "valid_idx"]
+                # Example: shardT[100] = ["sh1", "100", 123]
 
 def generate_random_req_id():
     return random.randint(10000, 99999)
@@ -199,6 +201,9 @@ async def rep_handler(request):
     }
     return web.json_response(response_json, status=200)
 
+## Nyati's changes here: 
+
+ 
 async def lb_analysis(request):
     global lb
     print(f"client_handler: Received Request to provide server load statistics", flush=True)
@@ -209,6 +214,9 @@ async def lb_analysis(request):
         "status": "successful"
     }
     return web.json_response(response_json, status=200)
+
+## My changes below:
+
 
 async def not_found(request):
     global lb
