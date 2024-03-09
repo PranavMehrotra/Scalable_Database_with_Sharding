@@ -4,7 +4,7 @@ import mysql.connector
 import time
 
 class SQLHandler:
-    def __init__(self,host='localhost',user='root',password='root@123',db='server_database', max_retries=5):
+    def __init__(self,host='localhost',user='root',password='',db='server_database', max_retries=5):
         self.host=host
         self.user=user
         self.password=password
@@ -17,7 +17,7 @@ class SQLHandler:
         attemps = 0
         while not connected:
             try:
-                print(f"Attempt {attemps+1}/{self.max_retries} to connect to the server...")
+                print(f"Attempt {attemps+1}/{self.max_retries} to connect to the SQL server...")
                 self.mydb = mysql.connector.connect(host=self.host,user=self.user, password=self.password)
                 self.Use_database(self.db)
                 connected=True

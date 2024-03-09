@@ -1,9 +1,10 @@
 # Import necessary modules
 from aiohttp import web
 from manager import Manager
+import os
 
-mgr = Manager()  ### Add user and password here of SQL server
-server_id = ""
+server_id = os.environ.get("SERVER_ID", "server")
+mgr = Manager(host='localhost',user='root',password=f"{server_id}@123")
 
 # Config endpoint to initialize the database
 async def config(request):
@@ -15,6 +16,7 @@ async def config(request):
         # Call the Config_database method of the Manager class 
         message, status = mgr.Config_database(request_json)
 
+        response_json = {}
         # Create a response JSON
         if status == 200:
             shards = request_json.get('shards', [])
@@ -50,19 +52,15 @@ async def heartbeat(request):
 # Copy endpoint to return database entries
 async def copy_database(request):
     try:
-        print("Copy endpoint called")
+        print("Copy endpoint called", flush=True)
         # Get the JSON data from the request
         request_json = await request.json()         
         database_copy, status = mgr.Copy_database(request_json)
         
+        response_json = {}
         # Create a response JSON
         if status == 200:
-            response_json = {}
-            
-            # Remove the first column (auto increment ID column) from each row
-            for shard_name, shard_data in database_copy.items():
-                updated_shard_data = [[row[1:], ] for row in shard_data]
-                response_json[shard_name] = updated_shard_data
+            response_json = database_copy
             
             response_json["status"] = "success"
             
@@ -87,11 +85,11 @@ async def read_database(request):
         request_json = await request.json()  
         database_entry, status = mgr.Read_database(request_json)
         
+        response_data = {}
         # Create a response JSON
         if status==200:
-            umodified_list = [(item[1], item[2], item[3]) for item in database_entry]
             response_data = {
-                    "data": umodified_list,
+                    "data": database_entry,
                     "status": "success"
                 }
         else:
@@ -117,6 +115,8 @@ async def write_database(request):
         request_json = await request.json()  
         message, status,id = mgr.Write_database(request_json)
         
+        response_data = {}
+        # Create a response JSON
         if status == 200:
             response_data = {
                     "message": message,
@@ -148,20 +148,20 @@ async def update(request):
         stud_id = request_json.get("Stud_id",[])
         message, status = mgr.Update_database(request_json)
     
+        response_data = {}
         # Create a response JSON
         if status == 200:
             response_data = {
                 "message": f"Data entry for Stud_id:{stud_id} updated",
                 "status": "success"
             }
-            return web.json_response(response_data, status=status)
         
         else:
             response_data = {
                 "message": f"{str(message)}",
                 "status": "failure"
             }
-            return web.json_response(response_data, status=status)        
+        return web.json_response(response_data, status=status)        
         
     except Exception as e:
         
@@ -178,6 +178,8 @@ async def del_database(request):
         stud_id = request_json.get("Stud_id")
         message, status = mgr.Delete_database(request_json)
 
+        response_data = {}
+        # Create a response JSON
         if status==200:
             response_data = {
                 "message": f"Data entry with Stud_id:{stud_id} removed",
@@ -228,8 +230,8 @@ if __name__ == '__main__':
     print("Starting server...")
 
     # Get the server_id from the environment variable
-    server_id = 'Server0' #os.environ.get("SERVER_ID"
+    # server_id = 'Server0' #os.environ.get("SERVER_ID"
     # # Run the web server
-    print("\nHi.", flush=True)
+    # print("\nHi.", flush=True)
     run_server()
 

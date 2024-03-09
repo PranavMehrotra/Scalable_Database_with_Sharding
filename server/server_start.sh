@@ -7,7 +7,7 @@ cntr=0
 until mysql -u root -e "SHOW DATABASES; ALTER USER 'root'@'localhost' IDENTIFIED BY '$SERVER_ID@123';" ; do
     sleep 1
     read -r -p "Can't connect, retrying..."
-    echo "Retrying..."
+    # echo "Retrying..."
     cntr=$((cntr+1))
     if [ $cntr -gt 5 ]; then
         echo "Failed to start MySQL server."
@@ -15,4 +15,5 @@ until mysql -u root -e "SHOW DATABASES; ALTER USER 'root'@'localhost' IDENTIFIED
     fi
 done
 
-python test1.py
+exec python3 server.py
+# python test.py

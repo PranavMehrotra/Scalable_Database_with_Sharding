@@ -5,7 +5,7 @@ import datetime
 async def send_json_request(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post('http://127.0.0.1:5000/config', json=json_data) as response:
+            async with session.post('http://0.0.0.0:5000/config', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -19,7 +19,7 @@ async def send_json_request(json_data):
 async def send_copy(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get('http://127.0.0.1:5000/copy', json=json_data) as response:
+            async with session.get('http://0.0.0.0:5000/copy', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -32,7 +32,7 @@ async def send_copy(json_data):
 async def read_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post('http://127.0.0.1:5000/read', json=json_data) as response:
+            async with session.post('http://0.0.0.0:5000/read', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -45,7 +45,7 @@ async def read_shard(json_data):
 async def update_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.put('http://127.0.0.1:5000/update', json=json_data) as response:
+            async with session.put('http://0.0.0.0:5000/update', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -58,7 +58,7 @@ async def update_shard(json_data):
 async def delete_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.delete('http://127.0.0.1:5000/del', json=json_data) as response:
+            async with session.delete('http://0.0.0.0:5000/del', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -72,7 +72,7 @@ async def delete_shard(json_data):
 async def write_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post('http://127.0.0.1:5000/write', json=json_data) as response:
+            async with session.post('http://0.0.0.0:5000/write', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -117,13 +117,14 @@ async def main():
     }
     await write_shard(write_json)
 
-    write_json = {
-    "shard":"sh1",
-    "curr_idx": 1,
-    "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
-    }
-    await write_shard(write_json)
+    # write_json2 = {
+    # "shard":"sh1",
+    # "curr_idx": 1,
+    # "data": [{"Stud_id":65,"Stud_name":'saransh',"Stud_marks":28},{"Stud_id":88,"Stud_name":'mehrotra',"Stud_marks":30},{"Stud_id":37,"Stud_name":'sara',"Stud_marks":12},{"Stud_id":56,"Stud_name":'shar',"Stud_marks":23}] 
+    # }
+    # await write_shard(write_json2)
 
+    # await write_shard(write_json)
 
     # copy_json = {
     #     "shards": ["sh3", "sh10"]
@@ -135,7 +136,7 @@ async def main():
     }
     await send_copy(copy_json)
 
-
+    # exit(0)
     # read_json = {
     #     "shard": "sh3",
     #     "Stud_id":{ "low": 10, "high": 11}
@@ -159,12 +160,12 @@ async def main():
 
 
     read_json = {
-        "shard": "sh3",
-        "Stud_id":{ "low": 40, "high": 100}
+        "shard": "sh1",
+        "Stud_id":{ "low": 37, "high": 100}
     }
     await read_shard(read_json)
 
-
+    exit(0)
     # read_json = {
     #     "shard": "sh3",
     #     "Stud_id":{ "low": 0, "high": 1}

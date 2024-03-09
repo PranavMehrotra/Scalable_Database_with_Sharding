@@ -2,17 +2,19 @@ from helper import SQLHandler
 import json
 
 class Manager:
-    def __init__(self,host='localhost',user='root',password='saransh03sharma',db='server_database'):
+    def __init__(self,host='localhost',user='root',password='',db='server_database'):
         self.sql_handler=SQLHandler(host=host,user=user,password=password,db=db)
-        self.schema = ''
+        self.schema: list = []
+        self.schema_set: set = set()
+        self.schema_str: str = ''
         
     def Config_database(self,config):
         try:
+            if not self.sql_handler.connected:
+                message, status = self.sql_handler.connect()
             
-            message, status = self.sql_handler.connect()
-            
-            if status != 200:
-                return message, status
+                if status != 200:
+                    return message, status
 
             if isinstance(config, str):
                 config = json.loads(config)
@@ -30,7 +32,9 @@ class Manager:
             dtypes = schema.get('dtypes', [])
             
             
-            self.schema = set(columns)
+            self.schema = list(columns)
+            self.schema_set = set(columns)
+            self.schema_str = (',').join(self.schema)
             if len(columns) != len(dtypes):
                 return "Number of columns and dtypes don't match", 400
 
@@ -67,8 +71,11 @@ class Manager:
             database_copy = {}
             for table_name in schema['shards']:   
                 
-                table_rows,status = self.sql_handler.Get_table_rows(table_name)        
-                database_copy[table_name] = table_rows
+                table_rows,status = self.sql_handler.Get_table_rows(table_name)   
+                # Remove first column (auto increment ID column) from each row and convert to list of dictionaries
+                len_row = len(table_rows[0]) if table_rows else 0
+                dict_table_rows = [{self.schema[i-1]: row[i] for i in range(1, len_row)} for row in table_rows]
+                database_copy[table_name] = dict_table_rows
             
                 if status != 200:
                     message = table_rows
@@ -92,7 +99,7 @@ class Manager:
             if 'shard' not in request_json:
                 return "'shard' field missing in request", 400
     
-            stud_id_obj = request_json["Stud_id"]
+            stud_id_obj = request_json.get("Stud_id",{})
 
             if "low" not in stud_id_obj or "high" not in stud_id_obj:
                 return "Both low and high values are required", 400
@@ -103,8 +110,10 @@ class Manager:
 
             table_rows,status = self.sql_handler.Get_range(table_name,low,high, "Stud_id")
             if status==200: 
-                print(table_rows,status)               
-                return table_rows,200
+                # Remove first column (auto increment ID column) from each row and convert to list of dictionaries
+                len_row = len(table_rows[0]) if table_rows else 0
+                dict_table_rows = [{self.schema[i-1]: row[i] for i in range(1,len_row)} for row in table_rows]            
+                return dict_table_rows,status
             else:
                 message = table_rows
                 
@@ -144,13 +153,15 @@ class Manager:
             row_str = ''
             
             for v in data:
-                missing_columns = self.schema - set(v.keys())
+                missing_columns = self.schema_set - set(v.keys())
 
                 if missing_columns:
                     missing_column = missing_columns.pop()  # Get the first missing column
-                    return f"{missing_column} not found", 400
+                    return f"{missing_column} not found", 400, valid_idx+1
                 
                 row = ''
+                ### 1. Why is explicit check for string type required? Can't we just use f"{v[k]},"?
+                ### 2. Make more efficient by using join
                 for k in self.schema:
                     if type(v[k]) == str:
                         row += f"'{v[k]}',"
@@ -161,13 +172,13 @@ class Manager:
             row_str = row_str[:-1]
              
             
-            schema = (',').join(self.schema)
-            message, status = self.sql_handler.Insert(tablename, row_str,schema)
+            # schema_str = (',').join(self.schema)
+            message, status = self.sql_handler.Insert(tablename, row_str,self.schema_str)
             
             if status != 200:    
                 return message, status,valid_idx+1
             
-            return "Data entries added", 200, valid_idx+num_entry
+            return "Data entries added", 200, valid_idx+num_entry+1
         
         except Exception as e:
             return e, 500, valid_idx
