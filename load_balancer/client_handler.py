@@ -5,6 +5,8 @@ from heartbeat import HeartBeat
 from docker_utils import spawn_server_cntnr, kill_server_cntnr
 import aiohttp
 from typing import Dict
+import bisect
+from RWLock import RWLock
 
 SERVER_PORT = 5000
 NUM_INITIAL_SERVERS = 3
@@ -12,11 +14,41 @@ RANDOM_SEED = 4326
 
 lb : LoadBalancer = ""
 hb_threads: Dict[str, HeartBeat] = {}
+
+shardT_lock = RWLock()
+
 shardT = {}   # shardT is a dictionary that maps "Stud_id_low" to a list ["Shartd_id", "Shard_size", "valid_idx"]
                 # Example: shardT[100] = ["sh1", "100", 123]
+stud_id_low = [] # stud_id_low is a global list that stores all the "Stud_id_low" values (of all shards) in sorted order
+
 
 def generate_random_req_id():
     return random.randint(10000, 99999)
+
+def find_shard_id(stud_id):
+    err=""
+    shardT_lock.acquire_reader()
+    idx = bisect.bisect_right(stud_id_low, stud_id)-1
+    # if stud_id is less than the lowest stud_id, then it is invalid
+    if (idx<0):
+        shardT_lock.release_reader()
+        err= "Invalid Stud_id: Stud_id does not exist in the database"
+        return "", err
+    # if stud_id is greater than the shard size, then it is invalid
+    elif (stud_id >= stud_id_low[idx] + int(shardT[stud_id_low[idx]][1])):
+        shardT_lock.release_reader()
+        err= "Invalid Stud_id: Stud_id does not exist in the database"
+        return "", err
+    # if stud_id is greater than the highest valid index in the shard, then it is invalid
+    elif (stud_id > shardT[stud_id_low[idx]][2]):
+        shardT_lock.release_reader()
+        err= "Invalid Stud_id: Stud_id does not exist in the database"
+        return "", err
+    
+    else:
+        shardT_lock.release_reader()
+        return shardT[stud_id_low[idx]][0], err
+    
 
 async def home(request):
     global lb
@@ -93,6 +125,7 @@ async def add_server_handler(request):
     # Add the shards to the system
     if len(shards) > 0:
         new_shards = lb.add_shards(shards)
+        
     # Add the servers to the system
     num_added, added_servers, err = lb.add_servers(num_servers, serv_to_shard)
 
@@ -206,7 +239,172 @@ async def rep_handler(request):
     return web.json_response(response_json, status=200)
 
 ## Nyati's changes here: 
+async def read_data_handler(request):
+    pass
 
+async def write_data_handler(request):
+    pass
+
+async def update_data_handler(request):
+    pass
+
+async def del_data_handler(request):
+    global lb
+    # print(f"client_handler: Received Request to delete a data entry", flush=True)
+    default_response_json = {
+        "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
+        "status": "failure"
+    }
+    try:
+        request_json = await request.json()
+        
+        if 'Stud_id' not in request_json:
+            response_json = {
+                "message": f"<Error> 'Stud_id' field missing in request",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        stud_id=request_json.get("Stud_id")
+        shard_id, err = find_shard_id(stud_id)
+        
+        if shard_id=="":
+            response_json = {
+                "message": f"<Error> {err}",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        servers = lb.list_shard_servers(shard_id)
+        
+        # if no servers are available for the shard, return a failure response
+        if len(servers)==0:
+            print(f"client_handler: No active servers for shard: {shard_id}", flush=True)
+            return web.json_response(default_response_json, status=500)
+        
+        servers_updated = []
+        server_json = {
+            "shard": shard_id,
+            "Stud_id": stud_id
+        }
+        
+        read_ctr=0
+        del_entry_copy={}
+        for server in servers:
+            
+            
+            # first read a copy of the entry to be deleted, if not already read from a server 
+            # this creates a backup of the entry to be deleted, in case the delete operation fails on some servers
+            # and we need to restore the entry
+            if read_ctr==0:
+                try:
+                    read_json = {
+                            "shard": shard_id,
+                            "Stud_id": {"low": stud_id, "high": stud_id+1}
+                    }
+                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+                        async with session.get(f'http://{server}:{SERVER_PORT}/read', json=read_json) as response:
+                            if response.status == 200:
+                                response_json=await response.json()
+                                data=response_json.get("data", [])
+                                if (len(data) != 1):
+                                    print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
+                                    return web.json_response(default_response_json, status=500)
+                                else:
+                                    del_entry_copy= data[0]
+                                    read_ctr+=1
+                                
+                            else:
+                                print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
+                                return web.json_response(default_response_json, status=500)
+                
+                except Exception as e:
+                    print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+                    response_json = {
+                        "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
+                        "status": "failure"
+                    }
+                    return web.json_response(response_json, status=500)
+                        
+            # delete the entry from the servers one by one
+            try:
+            # Send the request to the server and get the response, use aiohttp
+                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+                    async with session.delete(f'http://{server}:{SERVER_PORT}/del', json=server_json) as response:
+                        if response.status == 200:
+                            print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} successful", flush=True)
+                            servers_updated.append(server)
+                        else:
+                            print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
+                            
+                            ## ROLLBACK for the servers that have already been updated
+                            ### TO DO: ROLLBACK
+                            
+                            rollback_json = {
+                                "shard": shard_id,
+                                "curr_idx": stud_id,
+                                "data": [del_entry_copy]
+                            }   
+                                                   
+                            for server in servers_updated:
+                                try:
+                                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+                                        async with session.post(f'http://{server}:{SERVER_PORT}/write', json=rollback_json) as response:
+                                            if response.status == 200:
+                                                print(f"client_handler: Rollback successful on server: {server}", flush=True)
+                                            else:
+                                                print(f"client_handler: Rollback failed on server: {server}", flush=True)
+                                except Exception as e:
+                                    print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+                                    response_json = {
+                                        "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
+                                        "status": "failure"
+                                    }
+                                    return web.json_response(response_json, status=500)
+                            
+                            print(f"client_handler: Rollback successful on all servers", flush=True)
+                            return web.json_response(default_response_json, status=500)
+                            
+                                    
+            except Exception as e:
+                print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+
+                ## ROLLBACK for the servers that have already been updated
+                ### TO DO: ROLLBACK
+
+                rollback_json = {
+                    "shard": shard_id,
+                    "curr_idx": stud_id,
+                    "data": [del_entry_copy]
+                }   
+                                        
+                for server in servers_updated:
+                    try:
+                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+                            async with session.post(f'http://{server}:{SERVER_PORT}/write', json=rollback_json) as response:
+                                if response.status == 200:
+                                    print(f"client_handler: Rollback successful on server: {server}", flush=True)
+                                else:
+                                    print(f"client_handler: Rollback failed on server: {server}", flush=True)
+                    except Exception as e:
+                        print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+                        response_json = {
+                            "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
+                            "status": "failure"
+                        }
+                        return web.json_response(response_json, status=500)
+                
+                print(f"client_handler: Rollback successful on all servers", flush=True)
+                return web.json_response(default_response_json, status=500)                
+
+        
+    except Exception as e:
+        response_json = {
+            "message": f"<Error> Invalid payload format",
+            "status": "failure"
+        }
+        return web.json_response(response_json, status=400)
+    
  
 async def lb_analysis(request):
     global lb
@@ -261,6 +459,12 @@ def run_load_balancer():
     app.router.add_delete('/rm', remove_server_handler)
     app.router.add_get('/rep', rep_handler)
     app.router.add_get('/lb_analysis', lb_analysis)
+    
+    app.router.add_post('/read', read_data_handler)
+    app.router.add_post('/write', write_data_handler)
+    app.router.add_put('/update', update_data_handler)
+    app.router.add_delete('/del', del_data_handler)
+    
 
     app.router.add_route('*', '/{tail:.*}', not_found)
 

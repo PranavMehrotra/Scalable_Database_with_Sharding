@@ -4,6 +4,7 @@ from manager import Manager
 import os
 
 server_id = os.environ.get("SERVER_ID", "server")
+# print(f"Server ID: {server_id}")
 mgr = Manager(host='localhost',user='root',password=f"{server_id}@123")
 
 # Config endpoint to initialize the database
@@ -13,6 +14,7 @@ async def config(request):
 
         # Get the JSON data from the request
         request_json = await request.json() 
+        
         # Call the Config_database method of the Manager class 
         message, status = mgr.Config_database(request_json)
 
@@ -20,6 +22,8 @@ async def config(request):
         # Create a response JSON
         if status == 200:
             shards = request_json.get('shards', [])
+            shards=set(shards)
+            # print(f"Shards: {shards}", flush=True)
             message = ", ".join([f"{server_id}:{shard}" for shard in shards]) + " configured"
             
             response_json = {
@@ -145,12 +149,12 @@ async def update(request):
         print("Update endpoint called")
         # Get the JSON data from the request
         request_json = await request.json()  
-        stud_id = request_json.get("Stud_id",[])
         message, status = mgr.Update_database(request_json)
     
         response_data = {}
         # Create a response JSON
         if status == 200:
+            stud_id = request_json.get("Stud_id",[])
             response_data = {
                 "message": f"Data entry for Stud_id:{stud_id} updated",
                 "status": "success"
@@ -175,7 +179,7 @@ async def del_database(request):
         print("Delete endpoint called")
         # Get the JSON data from the request
         request_json = await request.json()  
-        stud_id = request_json.get("Stud_id")
+        stud_id = request_json.get("Stud_id", [])
         message, status = mgr.Delete_database(request_json)
 
         response_data = {}
@@ -227,7 +231,7 @@ def run_server():
 
 # Entry point of the script
 if __name__ == '__main__':
-    print("Starting server...")
+    print("Starting server...", flush=True)
 
     # Get the server_id from the environment variable
     # server_id = 'Server0' #os.environ.get("SERVER_ID"

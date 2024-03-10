@@ -21,13 +21,18 @@ class Manager:
             
             elif isinstance(config, dict):
                 config = config
-
+            if 'schema' not in config:
+                return "'schema' field missing in request", 400
                
             if 'shards' not in config:
                 return "'shards' field missing in request", 400
+            
+
         
             schema = config.get('schema', {})
             shards = config.get('shards', [])
+            shards = set(shards)
+            # print(f"Shards: {shards}", flush=True)
             columns = schema.get('columns', [])
             dtypes = schema.get('dtypes', [])
             
@@ -37,10 +42,13 @@ class Manager:
             self.schema_str = (',').join(self.schema)
             if len(columns) != len(dtypes):
                 return "Number of columns and dtypes don't match", 400
+            
 
             if schema and columns and dtypes and shards:    
                 for shard in shards:
                     message, status = self.sql_handler.Create_table(shard, columns, dtypes)
+                    print(message, status, flush=True)
+                    print(f"status: {status}", flush=True)
                     if status != 200:
                         return message, status
                     
@@ -71,7 +79,7 @@ class Manager:
             database_copy = {}
             for table_name in schema['shards']:   
                 
-                table_rows,status = self.sql_handler.Get_table_rows(table_name)   
+                table_rows,status = self.sql_handler.Get_table_rows(table_name) 
                 # Remove first column (auto increment ID column) from each row and convert to list of dictionaries
                 len_row = len(table_rows[0]) if table_rows else 0
                 dict_table_rows = [{self.schema[i-1]: row[i] for i in range(1, len_row)} for row in table_rows]
@@ -102,7 +110,7 @@ class Manager:
             stud_id_obj = request_json.get("Stud_id",{})
 
             if "low" not in stud_id_obj or "high" not in stud_id_obj:
-                return "Both low and high values are required", 400
+                return "Both low and high values are required for reading a range of entries.", 400
             
             
             table_name = request_json['shard']
@@ -134,6 +142,12 @@ class Manager:
 
             if 'shard' not in request_json:
                 return "'shard' field missing in request", 400, -1
+            
+            if 'curr_idx' not in request_json:
+                return "'curr_idx' field missing in request", 400, -1
+            
+            if 'data' not in request_json:
+                return "'data' field missing in request", 400, -1
         
             tablename = request_json.get("shard")
             data = request_json.get("data")
@@ -141,14 +155,13 @@ class Manager:
             num_entry = len(data)
 
             res,status = self.sql_handler.query(f"SELECT COUNT(*) FROM {tablename}")
-            
             if status != 200:
                 return res, status, -1
             
             valid_idx = res[0][0]
 
             if(curr_idx!=valid_idx+1):                
-                return "Invalid index",400,valid_idx+1
+                return "Invalid current index provided",400,valid_idx+1
             
             row_str = ''
             

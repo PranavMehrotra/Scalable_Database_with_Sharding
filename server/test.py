@@ -1,4 +1,5 @@
 import asyncio
+from time import sleep
 import aiohttp
 import datetime
 
@@ -11,7 +12,7 @@ async def send_json_request(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -25,7 +26,7 @@ async def send_copy(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -38,7 +39,7 @@ async def read_shard(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -51,7 +52,7 @@ async def update_shard(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -64,7 +65,7 @@ async def delete_shard(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -78,7 +79,7 @@ async def write_shard(json_data):
                     print(await response.json())
                 else:
                     print(f"Error in JSON Request {response.status}")
-                    print(await response.text())
+                    print(await response.text(), flush=True)
     except Exception as e:
         print("Error:", e)
 
@@ -102,6 +103,9 @@ async def main():
         "shards": ["sh1","sh2","sh3"]
     }
     await send_json_request(config_json)
+    
+    # print("Config done", flush=True)
+    # exit(0)
 
     # write_json = {
     # "shard":"sh3",
@@ -131,6 +135,7 @@ async def main():
     # }
     # await send_copy(copy_json)
 
+    # exit(0)
     copy_json = {
         "shards": ["sh3", "sh1"]
     }
@@ -159,13 +164,13 @@ async def main():
     # await read_shard(read_json)
 
 
-    read_json = {
-        "shard": "sh1",
-        "Stud_id":{ "low": 40, "high": 100}
-    }
-    await read_shard(read_json)
+    # read_json = {
+    #     "shard": "sh1",
+    #     "Stud_id":{ "low": 40, "high": 100}
+    # }
+    # await read_shard(read_json)
 
-    exit(0)
+    # exit(0)
     # read_json = {
     #     "shard": "sh3",
     #     "Stud_id":{ "low": 0, "high": 1}
@@ -180,15 +185,16 @@ async def main():
         "data": {"Stud_id":65,"Stud_name":'saransh_sharma',"Stud_marks":300} 
         }
     await update_shard(update_json)
+    # exit(0)
 
+    update_json = {
+        "shard":"sh10",
+        "Stud_id":65,
+        "data": {"Stud_id":65,"Stud_name":'saransh_sharma',"Stud_marks":300} 
+        }
+    await update_shard(update_json)
 
-    # update_json = {
-    #     "shard":"sh10",
-    #     "Stud_id":65,
-    #     "data": {"Stud_id":65,"Stud_name":'saransh_sharma',"Stud_marks":300} 
-    #     }
-    # await update_shard(update_json)
-
+    # exit(0)
 
     # update_json = {
     #     "shard":"sh3",
@@ -205,11 +211,11 @@ async def main():
     #     }
     # await delete_shard(del_json)
 
-    # del_json = {
-    #     "shard":"sh10",
-    #     "Stud_id":3,
-    #     }
-    # await delete_shard(del_json)
+    del_json = {
+        "shard":"sh10",
+        "Stud_id":3,
+        }
+    await delete_shard(del_json)
     
     del_json = {
         "shard":"sh1",
@@ -218,5 +224,7 @@ async def main():
     await delete_shard(del_json)
 
 if __name__ == '__main__':
+    print("Starting test")
+    sleep(1)
     asyncio.run(main())
 
