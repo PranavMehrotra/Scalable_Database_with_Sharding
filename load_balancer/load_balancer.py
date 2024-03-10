@@ -16,7 +16,8 @@ SLEEP_AFTER_SERVER_ADDITION = 1
 class LoadBalancer:
     def __init__(self):
         
-        self.servers = {} # dictionary of active servers (key: hostname, value: port)
+        self.serv_to_shard = {} # dictionary to store the mapping of servers to shards
+        self.servers = set()  # set of active servers
         self.rw_lock = RWLock()  # reader-writer lock to protect the self.servers set
         self.socket = None
         self.load_count = {}
@@ -107,6 +108,8 @@ class LoadBalancer:
         #     # self.servers[server] = final_add_server_dict[server] # port number
         #     self.servers.add(server)
         self.servers = self.servers.union(new_servers)
+        for server in new_servers:
+            self.serv_to_shard[server] = serv_to_shard[server]
         self.rw_lock.release_writer()
         
         ### TO-DO: For the servers that couldn't be added to the CH module (possibly due to lack of space), remove them from the list of servers to be added
@@ -120,12 +123,17 @@ class LoadBalancer:
     
     def add_shards(self, shards: list):
         new_shards = []
-        for shard in shards:
+        for val in shards:
+            shard = val[1]
             if shard not in self.consistent_hashing:
-                new_shards.append(shard)
-                self.rw_lock.acquire_writer()
-                self.consistent_hashing[shard] = ConsistentHashing(server_hostnames=[], num_servers=0)
-                self.rw_lock.release_writer()
+                try:
+                    self.rw_lock.acquire_writer()
+                    self.consistent_hashing[shard] = ConsistentHashing(server_hostnames=[], num_servers=0)
+                    self.rw_lock.release_writer()
+                except Exception as e:
+                    print("load_balancer: <Error> Could not add shard: " + str(shard) + " due to: " + str(e))
+                    continue
+                new_shards.append(val)
         return new_shards
 
 
@@ -216,6 +224,7 @@ class LoadBalancer:
             try:
                 # self.servers.pop(server)
                 self.servers.remove(server)
+                self.serv_to_shard.pop(server)
                 # print("load_balancer: Server: " + server + " removed!")
             except KeyError:
                 print("load_balancer: <Error> Server: '" + server + "' does not exist in the active list of servers!")
@@ -225,11 +234,18 @@ class LoadBalancer:
         
         return len(servers_rem_f), list(servers_rem_f), error 
                 
-    def list_servers(self):
-        self.rw_lock.acquire_reader()
-        servers_list = list(self.servers)
-        self.rw_lock.release_reader()
-        return servers_list           
+    def list_servers(self, send_shard_info: bool = False):
+        if send_shard_info:            
+            self.rw_lock.acquire_reader()
+            servers_list = list(self.servers)
+            serv_to_shard = self.serv_to_shard.copy()
+            self.rw_lock.release_reader()
+            return servers_list, serv_to_shard
+        else:
+            self.rw_lock.acquire_reader()
+            servers_list = list(self.servers)
+            self.rw_lock.release_reader()
+            return servers_list
 
     def assign_server(self, shard_id, req_id):
         self.rw_lock.acquire_reader()

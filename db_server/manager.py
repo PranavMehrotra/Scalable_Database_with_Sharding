@@ -2,7 +2,7 @@ from helper import SQLHandler
 import json
 
 class Manager:
-    def __init__(self,host='localhost',user='root',password='',db='server_database'):
+    def __init__(self,host='localhost',user='root',password='',db='db_server_database'):
         self.sql_handler=SQLHandler(host=host,user=user,password=password,db=db)
         self.schemas = {}
         
@@ -22,17 +22,18 @@ class Manager:
             schemas = config.get('schemas', {})
             for table in schemas.keys():
                 schema = schemas[table]
-                columns = schema.get('columns', [])
+                columns = list(schema.get('columns', []))
                 dtypes = schema.get('dtypes', [])
                 pk = schema.get('pk', [])
-                if len(columns) != len(dtypes):
+                unique_cols = set(columns)
+                if len(unique_cols) != len(dtypes):
                     return f"Number of columns and dtypes don't match for table {table}", 400
 
                 if schema and columns and dtypes:    
                     message, status = self.sql_handler.Create_table(table, columns, dtypes, pk)
                     
                     if status == 200:
-                        self.schemas[table] = set(columns)
+                        self.schemas[table] = {"columns": columns, "dtypes": dtypes, "pk": pk}
                     else:
                         return message, status
                 else:
@@ -48,7 +49,7 @@ class Manager:
             if not self.sql_handler.connected:
                 message, status = self.sql_handler.connect()
                 if status != 200:
-                    return message, status            
+                    return message, status           
             
             database_copy = {}
             for table_name in self.schemas.keys():   
@@ -60,12 +61,12 @@ class Manager:
             
                 database_copy[table_name] = table_rows
                 
-            return database_copy,200
+            return database_copy, 200
 
         except Exception as e:
 
             print(f"Error copying database: {str(e)}")
-            return e,500
+            return e, 500
         
     
     def Write_database(self,request_json):
@@ -82,10 +83,16 @@ class Manager:
             tablename = request_json.get("table")
             data = request_json.get("data", [])
             
+            if tablename not in self.schemas:
+                return f"Table {tablename} not found", 400
+            
             row_str = ''
-            schema = self.schemas[tablename]
+            # print(f"manager: data: {data}", flush=True)
+            schema = self.schemas[tablename]["columns"]
+            # print(f"manager: schema: {schema}", flush=True)
+            schema_set = set(schema)
             for v in data:
-                missing_columns = schema - set(v.keys())
+                missing_columns = schema_set - set(v.keys())
 
                 if missing_columns:
                     missing_column = missing_columns.pop()  # Get the first missing column

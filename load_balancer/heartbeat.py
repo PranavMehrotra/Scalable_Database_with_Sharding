@@ -11,7 +11,7 @@ from load_balancer import LoadBalancer
 from docker_utils import kill_server_cntnr
 
 HEARTBEAT_INTERVAL = 0.2
-SEND_FIRST_HEARTBEAT_AFTER = 0.5
+SEND_FIRST_HEARTBEAT_AFTER = 2
 
 class HeartBeat(threading.Thread):
     def __init__(self, lb: LoadBalancer, server_name, server_port=5000):
@@ -62,6 +62,7 @@ class HeartBeat(threading.Thread):
                         print(f"heartbeat: Spawning a new server: {server_name}!")
                         cntr = 0
                         
+                        ### NEED to change the remove and add servers function calls
                         #remove server from
                         lb.remove_servers(1, [server_name])
                         kill_server_cntnr(server_name)
@@ -92,6 +93,7 @@ class HeartBeat(threading.Thread):
                     print(f"heartbeat: Spawning a new server: {server_name}!")
                     cntr = 0
                     
+                    ### NEED to change the remove and add servers function calls
                     #remove server from the loadbalancer
                     lb.remove_servers(1, [server_name])
 

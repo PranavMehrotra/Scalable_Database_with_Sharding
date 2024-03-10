@@ -6,9 +6,11 @@ import os
 
 server_id = os.environ.get("SERVER_ID", "server")
 mgr = Manager(host='localhost',user='root',password=f"{server_id}@123")
+StudT_schema = {}
 
 async def config(request):
     try:
+        global StudT_schema
         request_json = await request.json()
         if isinstance(request_json, str):
             request_json = json.loads(request_json)
@@ -19,6 +21,7 @@ async def config(request):
             schemas = request_json.get('schemas', [])
             message = ", ".join([table for table in schemas.keys()]) + " tables created"
             
+            StudT_schema = dict(request_json.get("StudT_schema", {}))
             response_json = {
                 "message": message,
                 "status": "success"
@@ -47,11 +50,13 @@ async def heartbeat(request):
 
 async def read_database(request):
     try:
+        global StudT_schema
         # request_json = await request.json()
         database_entry, status = mgr.Read_database()
         
         if status==200:
             response_data = {
+                    "StudT_schema": StudT_schema,
                     "data": database_entry,
                     "status": "success"
                 }
@@ -86,6 +91,7 @@ async def write_database(request):
                     "error": message,
                     "status": "failure"
                 }
+            print(f"DB_Server: Error in write endpoint: {str(message)}", flush=True)
             
         return web.json_response(response_data, status=status)  
     

@@ -2,10 +2,13 @@ import asyncio
 import aiohttp
 import datetime
 
+DB_SERVER_PORT = 32845
+
+
 async def send_json_request(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post('http://0.0.0.0:5000/config', json=json_data) as response:
+            async with session.post(f"http://0.0.0.0:{DB_SERVER_PORT}/config", json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -19,7 +22,7 @@ async def send_json_request(json_data):
 async def send_copy(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get('http://0.0.0.0:5000/copy', json=json_data) as response:
+            async with session.get(f'http://0.0.0.0:{DB_SERVER_PORT}/copy', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -32,7 +35,7 @@ async def send_copy(json_data):
 async def read_shard():
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get('http://0.0.0.0:5000/read') as response:
+            async with session.get(f'http://0.0.0.0:{DB_SERVER_PORT}/read') as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -45,7 +48,7 @@ async def read_shard():
 async def update_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.put('http://0.0.0.0:5000/update', json=json_data) as response:
+            async with session.put(f'http://0.0.0.0:{DB_SERVER_PORT}/update', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -58,7 +61,7 @@ async def update_shard(json_data):
 async def delete_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.delete('http://0.0.0.0:5000/del', json=json_data) as response:
+            async with session.delete(f'http://0.0.0.0:{DB_SERVER_PORT}/del', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -72,7 +75,7 @@ async def delete_shard(json_data):
 async def write_shard(json_data):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.post('http://0.0.0.0:5000/write', json=json_data) as response:
+            async with session.post(f'http://0.0.0.0:{DB_SERVER_PORT}/write', json=json_data) as response:
                 if response.status == 200:
                     print("JSON Request Successful")
                     print(await response.json())
@@ -108,36 +111,36 @@ async def main():
             },
         },
     }
-    await send_json_request(config_json)
+    # await send_json_request(config_json)
 
-    write_json = {
-        "table": "ShardT",
-        "data": [{"Stud_id_low": 0, "Shard_id": "sh1", "Shard_size": 100, "valid_idx": 0},
-                 {"Stud_id_low": 100, "Shard_id": "sh2", "Shard_size": 100, "valid_idx": 0},
-                 {"Stud_id_low": 200, "Shard_id": "sh3", "Shard_size": 100, "valid_idx": 0}] 
-    }
-    await write_shard(write_json)
+    # write_json = {
+    #     "table": "ShardT",
+    #     "data": [{"Stud_id_low": 0, "Shard_id": "sh1", "Shard_size": 100, "valid_idx": 0},
+    #              {"Stud_id_low": 100, "Shard_id": "sh2", "Shard_size": 100, "valid_idx": 0},
+    #              {"Stud_id_low": 200, "Shard_id": "sh3", "Shard_size": 100, "valid_idx": 0}] 
+    # }
+    # await write_shard(write_json)
 
-    write_json_2 = {
-        "table": "MapT",
-        "data": [{"Shard_id": "sh1", "Server_id": "server1"},
-                 {"Shard_id": "sh2", "Server_id": "server2"},
-                 {"Shard_id": "sh3", "Server_id": "server3"},
-                 {"Shard_id": "sh1", "Server_id": "server2"},
-                 {"Shard_id": "sh2", "Server_id": "server3"},
-                 {"Shard_id": "sh3", "Server_id": "server1"}]
-    }
-    await write_shard(write_json_2)
+    # write_json_2 = {
+    #     "table": "MapT",
+    #     "data": [{"Shard_id": "sh1", "Server_id": "server1"},
+    #              {"Shard_id": "sh2", "Server_id": "server2"},
+    #              {"Shard_id": "sh3", "Server_id": "server3"},
+    #              {"Shard_id": "sh1", "Server_id": "server2"},
+    #              {"Shard_id": "sh2", "Server_id": "server3"},
+    #              {"Shard_id": "sh3", "Server_id": "server1"}]
+    # }
+    # await write_shard(write_json_2)
 
     print("Update ShardT")
     update_json = {
         "table": "ShardT",
         "column": "Stud_id_low",
-        "keys": [0,200],
+        "keys": [0,8192],
         "update_column": "valid_idx",
         "update_vals": [112,218]
     }
-    await update_shard(update_json)
+    # await update_shard(update_json)
 
     ## Uncomment to delete entries
     # delete_entries = {

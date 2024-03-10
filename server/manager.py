@@ -28,14 +28,14 @@ class Manager:
         
             schema = config.get('schema', {})
             shards = config.get('shards', [])
-            columns = schema.get('columns', [])
+            columns = list(schema.get('columns', []))
             dtypes = schema.get('dtypes', [])
             
             
             self.schema = list(columns)
             self.schema_set = set(columns)
             self.schema_str = (',').join(self.schema)
-            if len(columns) != len(dtypes):
+            if len(self.schema_set) != len(dtypes):
                 return "Number of columns and dtypes don't match", 400
 
             if schema and columns and dtypes and shards:    
@@ -249,4 +249,18 @@ class Manager:
         
         except Exception as e:    
             return e,500 
+        
+    # Commit the changes to the database
+    def Commit(self):
+        try:
+            if not self.sql_handler.connected:
+                message, status = self.sql_handler.connect()
+                if status != 200:
+                    return message, status
+
+            self.sql_handler.mydb.commit()
+            return "Changes committed", 200
+        
+        except Exception as e:
+            return e, 500
     

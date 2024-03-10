@@ -199,6 +199,34 @@ async def del_database(request):
         print(f"Server: Error in delete endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
+# Commit endpoint to commit the changes to the database
+async def commit(request):
+    try:
+        print("Commit endpoint called")
+        # Get the JSON data from the request  
+        message, status = mgr.Commit()
+        
+        response_data = {}
+        # Create a response JSON
+        if status==200:
+            response_data = {
+                "message": message,
+                "status": "success"
+            }
+        
+        else:
+            response_data = {
+                "error": message,
+                "status": "failure"
+            }
+        
+        return web.json_response(response_data, status=status)
+    
+    except Exception as e:
+        
+        print(f"Server: Error in commit endpoint: {str(e)}")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
 # Catch-all endpoint for any other request
 async def not_found(request):
     return web.Response(text="Not Found", status=400)
@@ -217,6 +245,7 @@ def run_server():
     app.router.add_post('/write', write_database)
     app.router.add_put('/update', update)
     app.router.add_delete('/del', del_database)
+    app.router.add_get('/commit', commit)
 
 
     # Add a catch-all route for any other endpoint, which returns a 400 Bad Request

@@ -55,7 +55,7 @@ class SQLHandler:
             res=cursor.fetchall()
             # print(sql, res)
             cursor.close()
-            self.mydb.commit()
+            # self.mydb.commit()
             return res,200
         except mysql.connector.errors.DataError as e:
             return "DataError: data exception", 400

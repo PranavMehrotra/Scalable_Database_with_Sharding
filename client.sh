@@ -68,8 +68,24 @@ while true; do
       "http://0.0.0.0:5000/rm"
 
       echo ""
-  elif [ "${action,,}" == "home" ]; then
-      curl -X GET "http://0.0.0.0:5000/home"
+  elif [ "${action,,}" == "init" ]; then
+    # -d "{\"N\":3,
+    # \"schema\":{\"columns\":[\"Stud_id\",\"Stud_name\",\"Stud_marks\"],
+    # \"dtypes\":[\"Number\",\"String\",\"String\"]}
+    # \"shards\":[{\"Stud_id_low\":0, \"Shard_id\": \"sh1\", \"Shard_size\":4096},
+    # {\"Stud_id_low\":4096, \"Shard_id\": \"sh2\", \"Shard_size\":4096},
+    # {\"Stud_id_low\":8192, \"Shard_id\": \"sh3\", \"Shard_size\":4096},]
+    # \"servers\":{\"Server0\":[\"sh1\",\"sh2\"],
+    # \"Server1\":[\"sh2\",\"sh3\"],
+    # \"Server2\":[\"sh1\",\"sh3\"]}
+    # }" \
+      curl -X POST \
+        -H "Content-type: application/json" \
+        -d '{  "N":3,  "schema":{"columns":["Stud_id","Stud_name","Stud_marks"],"dtypes":["Number","String","String"]},  "shards":[{"Stud_id_low":0, "Shard_id": "sh1", "Shard_size":4096},  {"Stud_id_low":4096, "Shard_id": "sh2", "Shard_size":4096},  {"Stud_id_low":8192, "Shard_id": "sh3", "Shard_size":4096}],  "servers":{"Server0":["sh1","sh2"],"Server1":["sh2","sh3"],"Server2":["sh1","sh3"]}}' \
+            "http://0.0.0.0:5000/init"
+      echo ""
+  elif [ "${action,,}" == "status" ]; then
+      curl -X GET "http://0.0.0.0:5000/status"
       echo ""
   elif [ "${action,,}" == "rep" ]; then
       curl -X GET "http://0.0.0.0:5000/rep"
