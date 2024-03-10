@@ -128,7 +128,7 @@ class SQLHandler:
                         col_config+=f", {c} {dmap[d]} UNIQUE"
                     else:
                         col_config+=f", {c} {dmap[d]}"
-                
+            
                 # Execute SQL query to create the table
                 res,status = self.query(f"CREATE TABLE {tabname} (ID INT AUTO_INCREMENT {col_config}, PRIMARY KEY (ID,{columns[0]}));")
                 if status != 200:
@@ -159,6 +159,8 @@ class SQLHandler:
     def Delete_entry(self,table_name,idx,col):
         try:
             res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`='{idx}'")
+            if status != 200:
+                return res, status
             if res == []:
                 return "No matching entries found",404
             res,status = self.query(f"DELETE FROM {table_name} WHERE `{col}`='{idx}';")
@@ -173,6 +175,9 @@ class SQLHandler:
     def Update_database(self,table_name,Stud_id,updated_val,col):
         try:
             res,status = self.query(f"SELECT * FROM {table_name} WHERE `{col}`={Stud_id}")
+            if status != 200:
+                return res, status
+            
             if res == []:
                 return "No matching entries found",404
             
@@ -195,7 +200,7 @@ class SQLHandler:
             res,status = self.query(f"UPDATE {table_name} SET {update_query_str} WHERE Stud_id={Stud_id}")
             if status != 200:
                     return res, status
-            
+            print("Entry updated successfully", flush=True)
             return "Entry updated successfully",200
         except Exception as e:
             return e,500
