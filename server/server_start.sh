@@ -15,6 +15,6 @@ until mysql -u root -e "SHOW DATABASES; ALTER USER 'root'@'localhost' IDENTIFIED
     fi
 done
 
-# exec python3 server.py
+exec python3 server.py
 # python3 test.py
-python3 parallel.py 
+# python3 parallel.py 

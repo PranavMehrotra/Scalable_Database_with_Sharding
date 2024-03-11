@@ -34,7 +34,8 @@ async def config(request):
         else:
            # fail json message
             response_json = {
-                "error": str(message),
+                # "error": str(message),
+                "message": f"<Error>: {message}",
                 "status": "failure"
             }
         
@@ -65,13 +66,13 @@ async def copy_database(request):
         # Create a response JSON
         if status == 200:
             response_json = database_copy
-            
             response_json["status"] = "success"
             
         else:
             message = database_copy
             response_json = {
-                "error": message,
+                # "error": message,
+                "message": f"<Error>: {message}",
                 "status": "failure"
             }
         return web.json_response(response_json, status=status)
@@ -99,7 +100,8 @@ async def read_database(request):
         else:
             message = database_entry
             response_data = {
-                    "error": message,
+                    # "error": message,
+                    "message": f"<Error>: {message}",
                     "status": "failure"
                 }
     
@@ -130,7 +132,8 @@ async def write_database(request):
             
         else:
             response_data = {
-                    "error": message,
+                    # "error": message,
+                    "message": f"<Error>: {message}",
                     "current_idx":id,
                     "status": "failure"
                 }
@@ -162,7 +165,7 @@ async def update(request):
         
         else:
             response_data = {
-                "message": f"{str(message)}",
+                "message": f"<Error>: {message}",
                 "status": "failure"
             }
         return web.json_response(response_data, status=status)        
@@ -179,12 +182,13 @@ async def del_database(request):
         print("Delete endpoint called")
         # Get the JSON data from the request
         request_json = await request.json()  
-        stud_id = request_json.get("Stud_id", [])
+
         message, status = mgr.Delete_database(request_json)
 
         response_data = {}
         # Create a response JSON
         if status==200:
+            stud_id = request_json.get("Stud_id", [])
             response_data = {
                 "message": f"Data entry with Stud_id:{stud_id} removed",
                 "status": "success"
@@ -192,7 +196,8 @@ async def del_database(request):
         
         else:
             response_data = {
-                "error": f'{str(message)}',
+                # "error": f'{str(message)}',
+                "message": f"<Error>: {message}",
                 "status": "failure"
             }    
         
@@ -209,6 +214,7 @@ async def commit(request):
         print("Commit endpoint called")
         # Get the JSON data from the request  
         message, status = mgr.Commit()
+        # message, status = mgr.sql_handler.db.commit()
         
         response_data = {}
         # Create a response JSON
@@ -217,10 +223,10 @@ async def commit(request):
                 "message": message,
                 "status": "success"
             }
-        
         else:
             response_data = {
-                "error": message,
+                # "error": message,
+                "message": f"<Error>: {message}",
                 "status": "failure"
             }
         
@@ -231,6 +237,35 @@ async def commit(request):
         print(f"Server: Error in commit endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
+
+# Rollback endpoint to rollback the changes to the database
+async def rollback(request):
+    try:
+        print("Rollback endpoint called")
+        message, status = mgr.Rollback()
+        
+        response_data = {}
+        # Create a response JSON
+        if status==200:
+            response_data = {
+                "message": message,
+                "status": "success"
+            }
+        else:
+            response_data = {
+                # "error": message,
+                "message": f"<Error>: {message}",
+                "status": "failure"
+            }
+        
+        return web.json_response(response_data, status=status)        
+  
+    except Exception as e:
+        
+        print(f"Server: Error in commit endpoint: {str(e)}")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+      
+        
 # Catch-all endpoint for any other request
 async def not_found(request):
     return web.Response(text="Not Found", status=400)
@@ -250,6 +285,7 @@ def run_server():
     app.router.add_put('/update', update)
     app.router.add_delete('/del', del_database)
     app.router.add_get('/commit', commit)
+    app.router.add_get('/rollback', rollback)
 
 
     # Add a catch-all route for any other endpoint, which returns a 400 Bad Request

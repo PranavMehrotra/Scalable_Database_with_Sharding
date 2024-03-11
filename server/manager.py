@@ -40,7 +40,7 @@ class Manager:
             self.schema = list(columns)
             self.schema_set = set(columns)
             self.schema_str = (',').join(self.schema)
-            if len(columns) != len(dtypes):
+            if len(self.schema_set) != len(dtypes):
                 return "Number of columns and dtypes don't match", 400
             
 
@@ -263,3 +263,29 @@ class Manager:
         except Exception as e:    
             return e,500 
     
+
+    def Commit(self):
+        try:
+            if not self.sql_handler.connected:
+                message, status = self.sql_handler.connect()
+                if status != 200:
+                    return message, status
+
+            message, status = self.sql_handler.mydb.commit()
+            return "Changes committed", 200
+
+        except Exception as e:
+            return e,500
+        
+    def Rollback(self):
+        try:
+            if not self.sql_handler.connected:
+                message, status = self.sql_handler.connect()
+                if status != 200:
+                    return message, status
+
+            message, status = self.sql_handler.mydb.rollback()
+            return "Changes rolled back", 200
+
+        except Exception as e:
+            return e,500

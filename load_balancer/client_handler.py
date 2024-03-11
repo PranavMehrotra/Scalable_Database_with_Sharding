@@ -43,6 +43,10 @@ def generate_random_req_id():
     return random.randint(10000, 99999)
 
 def find_shard_id(stud_id):
+    global shardT
+    global stud_id_low
+    global shardT_lock
+    
     err=""
     shardT_lock.acquire_reader()
     idx = bisect.bisect_right(stud_id_low, stud_id)-1
@@ -56,16 +60,57 @@ def find_shard_id(stud_id):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: Stud_id does not exist in the database"
         return "", err
-    # if stud_id is greater than the highest valid index in the shard, then it is invalid
-    elif (stud_id > shardT[stud_id_low[idx]][2]):
-        shardT_lock.release_reader()
-        err= "Invalid Stud_id: Stud_id does not exist in the database"
-        return "", err
+    
+    # # if stud_id is greater than the highest valid index in the shard, then it is invalid
+    # elif (stud_id > shardT[stud_id_low[idx]][2]):
+    #     shardT_lock.release_reader()
+    #     err= "Invalid Stud_id: Stud_id does not exist in the database"
+    #     return "", err
     
     else:
         shardT_lock.release_reader()
         return shardT[stud_id_low[idx]][0], err
     
+    
+async def communicate_with_server(server, endpoint, payload={}):
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+            request_url = f'http://{server}:{SERVER_PORT}/{endpoint}'
+            
+            if endpoint == "copy" or "commit" or "rollback":
+                async with session.get(request_url, json=payload) as response:
+                    response_status = response.status
+                    if response_status == 200:
+                        return True, await response.json()
+                    else:
+                        return False, await response.json()
+            
+            elif endpoint == "read" or "write" or "config":
+                async with session.post(request_url, json=payload) as response:
+                    response_status = response.status
+                    if response_status == 200:
+                        return True, await response.json()
+                    else:
+                        return False, await response.json()
+                    
+            elif endpoint == "update":
+                async with session.put(request_url, json=payload) as response:
+                    response_status = response.status
+                    if response_status == 200:
+                        return True, await response.json()
+                    else:
+                        return False, await response.json()
+                    
+            elif endpoint == "del":
+                async with session.delete(request_url, json=payload) as response:
+                    response_status = response.status
+                    if response_status == 200:
+                        return True, await response.json()
+                    else:
+                        return False, await response.json()
+            
+    except Exception as e:
+        return False, e
 
 async def home(request):
     global lb
@@ -282,11 +327,13 @@ async def update_data_handler(request):
 
 async def del_data_handler(request):
     global lb
-    # print(f"client_handler: Received Request to delete a data entry", flush=True)
+    
+    print(f"client_handler: Received Request to delete a data entry", flush=True)
     default_response_json = {
         "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
         "status": "failure"
     }
+    
     try:
         request_json = await request.json()
         
@@ -298,6 +345,7 @@ async def del_data_handler(request):
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
+        
         shard_id, err = find_shard_id(stud_id)
         
         if shard_id=="":
@@ -307,7 +355,9 @@ async def del_data_handler(request):
             }
             return web.json_response(response_json, status=400)
         
+        lb.consistent_hashing[shard_id].lock.acquire_reader()
         servers = lb.list_shard_servers(shard_id)
+        lb.consistent_hashing[shard_id].lock.release_reader()
         
         # if no servers are available for the shard, return a failure response
         if len(servers)==0:
@@ -315,120 +365,84 @@ async def del_data_handler(request):
             return web.json_response(default_response_json, status=500)
         
         servers_updated = []
+        
         server_json = {
             "shard": shard_id,
             "Stud_id": stud_id
         }
         
-        read_ctr=0
-        del_entry_copy={}
-        for server in servers:
-            
-            
-            # first read a copy of the entry to be deleted, if not already read from a server 
-            # this creates a backup of the entry to be deleted, in case the delete operation fails on some servers
-            # and we need to restore the entry
-            if read_ctr==0:
-                try:
-                    read_json = {
-                            "shard": shard_id,
-                            "Stud_id": {"low": stud_id, "high": stud_id+1}
-                    }
-                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-                        async with session.get(f'http://{server}:{SERVER_PORT}/read', json=read_json) as response:
-                            if response.status == 200:
-                                response_json=await response.json()
-                                data=response_json.get("data", [])
-                                if (len(data) != 1):
-                                    print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
-                                    return web.json_response(default_response_json, status=500)
-                                else:
-                                    del_entry_copy= data[0]
-                                    read_ctr+=1
-                                
-                            else:
-                                print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
-                                return web.json_response(default_response_json, status=500)
+        rollback = False
+
+        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        for server in servers:            
+            # delete the entry from the servers one by one
+            status, response = await communicate_with_server(server, "del", server_json)
+            if status:
+                servers_updated.append(server)
+            else:
+                rollback = True
+                break
+          
+        lb.consistent_hashing[shard_id].lock.release_reader()
+        
+        if rollback:
+            # rollback the delete operation on the servers
+            for server in servers_updated:
+                retry_cntr = 5
+                while retry_cntr > 0:
+                    status, response = await communicate_with_server(server, "rollback")
+                    if status:
+                        break
+                    retry_cntr -= 1
                 
-                except Exception as e:
-                    print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+                if retry_cntr == 0:
+                    print(f"client_handler: Rollback failed on server: {server}")
+                    
+                    ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a rollback failure
+                    
+                    ## FOR NOW: Just return a failure response explicitly stating data inconsistency
                     response_json = {
-                        "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
+                        "message": f"<Error> Data inconsistency: The requested deletion created an inconsistency in the database",
                         "status": "failure"
                     }
                     return web.json_response(response_json, status=500)
-                        
-            # delete the entry from the servers one by one
-            try:
-            # Send the request to the server and get the response, use aiohttp
-                async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-                    async with session.delete(f'http://{server}:{SERVER_PORT}/del', json=server_json) as response:
-                        if response.status == 200:
-                            print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} successful", flush=True)
-                            servers_updated.append(server)
-                        else:
-                            print(f"client_handler: Request to delete Stud_id: {stud_id} from server: {server} failed", flush=True)
-                            
-                            ## ROLLBACK for the servers that have already been updated
-                            ### TO DO: ROLLBACK
-                            
-                            rollback_json = {
-                                "shard": shard_id,
-                                "curr_idx": stud_id,
-                                "data": [del_entry_copy]
-                            }   
-                                                   
-                            for server in servers_updated:
-                                try:
-                                    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-                                        async with session.post(f'http://{server}:{SERVER_PORT}/write', json=rollback_json) as response:
-                                            if response.status == 200:
-                                                print(f"client_handler: Rollback successful on server: {server}", flush=True)
-                                            else:
-                                                print(f"client_handler: Rollback failed on server: {server}", flush=True)
-                                except Exception as e:
-                                    print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
-                                    response_json = {
-                                        "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
-                                        "status": "failure"
-                                    }
-                                    return web.json_response(response_json, status=500)
-                            
-                            print(f"client_handler: Rollback successful on all servers", flush=True)
-                            return web.json_response(default_response_json, status=500)
-                            
-                                    
-            except Exception as e:
-                print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
+                    
+            return web.json_response(default_response_json, status=500)  
+      
+      
+        # commit the delete operation on all the servers  
+        else:
+ 
+            lb.consistent_hashing[shard_id].lock.acquire_reader()
+            assert (servers_updated == servers)
+            for server in servers_updated:
+                retry_cntr = 5
+                while retry_cntr > 0:
+                    status, response = await communicate_with_server(server, "commit")
+                    if status:
+                        break
+                    retry_cntr -= 1 
 
-                ## ROLLBACK for the servers that have already been updated
-                ### TO DO: ROLLBACK
-
-                rollback_json = {
-                    "shard": shard_id,
-                    "curr_idx": stud_id,
-                    "data": [del_entry_copy]
-                }   
-                                        
-                for server in servers_updated:
-                    try:
-                        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-                            async with session.post(f'http://{server}:{SERVER_PORT}/write', json=rollback_json) as response:
-                                if response.status == 200:
-                                    print(f"client_handler: Rollback successful on server: {server}", flush=True)
-                                else:
-                                    print(f"client_handler: Rollback failed on server: {server}", flush=True)
-                    except Exception as e:
-                        print(f"client_handler: Error in contacting server: {server}, {str(e)}", flush=True)
-                        response_json = {
-                            "message": f"<Error> Internal Server Error: The requested Stud_id could not be deleted",
-                            "status": "failure"
-                        }
-                        return web.json_response(response_json, status=500)
-                
-                print(f"client_handler: Rollback successful on all servers", flush=True)
-                return web.json_response(default_response_json, status=500)                
-
+                if retry_cntr == 0:
+                    print(f"client_handler: Commit failed on server: {server}")
+                    lb.consistent_hashing[shard_id].lock.release_reader()
+                    
+                    ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a commit failure
+                    
+                    ## FOR NOW: Just return a failure response explicitly stating data inconsistency
+                    response_json = {
+                        "message": f"<Error> Data inconsistency: The requested deletion created an inconsistency in the database",
+                        "status": "failure"
+                    }
+                    return web.json_response(response_json, status=500)
+  
+            lb.consistent_hashing[shard_id].lock.release_reader()
+            
+            response_json = {
+                "message": f"Data entry with Stud_id:{stud_id} removed from all shard replicas",
+                "status": "success"
+            }
+            return web.json_response(response_json, status=200)
         
     except Exception as e:
         response_json = {
@@ -463,33 +477,35 @@ def heartbeat_db_server():
         return False
 
 # Function to send POST request to the server /config endpoint to initialize the database
-async def config_server(server, payload):
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-            async with session.post(f'http://{server}:{SERVER_PORT}/config', json=payload) as response:
-                response_status = response.status
-                if response_status == 200:
-                    return True
-                else:
-                    print(f"client_handler: Failed to configure server {server}\nResponse: {await response.json()}", flush=True)
-                    return False
-    except:
-        return False
+# async def config_server(server, payload):
+#     try:
+#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+#             async with session.post(f'http://{server}:{SERVER_PORT}/config', json=payload) as response:
+#                 response_status = response.status
+#                 if response_status == 200:
+#                     return True
+#                 else:
+#                     print(f"client_handler: Failed to configure server {server}\nResponse: {await response.json()}", flush=True)
+#                     return False
+#     except:
+#         return False
 
 # Function to write values to the /write endpoint of server
 ## IMPORTANT: Only to be used for writing to the db_server
-async def write_server(server, payload):
-    try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-            async with session.post(f'http://{server}:{SERVER_PORT}/write', json=payload) as response:
-                response_status = response.status
-                if response_status == 200:
-                    return True
-                else:
-                    print(f"client_handler: Failed to write to server {server}\nResponse: {await response.json()}", flush=True)
-                    return False
-    except:
-        return False
+# async def write_server(server, payload):
+#     try:
+#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+#             async with session.post(f'http://{server}:{SERVER_PORT}/write', json=payload) as response:
+#                 response_status = response.status
+#                 if response_status == 200:
+#                     return True
+#                 else:
+#                     print(f"client_handler: Failed to write to server {server}\nResponse: {await response.json()}", flush=True)
+#                     return False
+#     except:
+#         return False
+    
+
 
 async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
     # Spawn the db_server container
@@ -509,7 +525,9 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
         },
         "StudT_schema": StudT_schema,
     }
-    if not await config_server(db_server_hostname, payload):
+    # if not await config_server(db_server_hostname, payload):
+    status, response = await communicate_with_server(db_server_hostname, "config", payload)
+    if not status:
         response_json = {
             "message": f"<Error> Failed to configure the db_server",
             "status": "failure"
@@ -525,7 +543,9 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
         # Map ShardT_schema["columns"] to shard, val
         payload["data"].append(dict(zip(ShardT_schema["columns"], [shard] + val)))
     # print(f"client_handler: Writing ShardT to db_server: {payload}", flush=True)
-    if not await write_server(db_server_hostname, payload):
+    status, response = await communicate_with_server(db_server_hostname, "write", payload)
+    # if not await write_server(db_server_hostname, payload):
+    if not status:
         response_json = {
             "message": f"<Error> Failed to write ShardT table to the db_server",
             "status": "failure"
@@ -539,7 +559,9 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
     for server, shards in serv_to_shard.items():
         for shard in shards:
             payload["data"].append(dict(zip(MapT_schema["columns"], [shard, server])))
-    if not await write_server(db_server_hostname, payload):
+    # if not await write_server(db_server_hostname, payload):
+    status, response = await communicate_with_server(db_server_hostname, "write", payload)
+    if not status:
         response_json = {
             "message": f"<Error> Failed to write MapT table to the db_server",
             "status": "failure"
@@ -670,7 +692,9 @@ async def init_handler(request):
     for server in added_servers:
         payload["shards"] = serv_to_shard[server]
         # Send a POST request to the server /config endpoint to initialize the database
-        if not await config_server(server, payload):
+        # if not await config_server(server, payload):
+        status, response = await communicate_with_server(server, "config", payload)
+        if not status:
             response_json = {
                 "message": f"<Error> Failed to configure server {server}",
                 "status": "failure"
