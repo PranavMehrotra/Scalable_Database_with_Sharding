@@ -34,8 +34,8 @@ async def config(request):
         else:
            # fail json message
             response_json = {
-                # "error": str(message),
-                "message": f"<Error>: {message}",
+                "message": str(message),
+                # "message": f"<Error>: {message}",
                 "status": "failure"
             }
         
@@ -71,8 +71,9 @@ async def copy_database(request):
         else:
             message = database_copy
             response_json = {
-                # "error": message,
-                "message": f"<Error>: {message}",
+                # "error": str(message),
+                "message": str(message),
+                # "message": f"<Error>: {message}",
                 "status": "failure"
             }
         return web.json_response(response_json, status=status)
@@ -94,16 +95,16 @@ async def read_database(request):
         # Create a response JSON
         if status==200:
             response_data = {
-                    "data": database_entry,
-                    "status": "success"
-                }
+                "data": database_entry,
+                "status": "success"
+            }
         else:
             message = database_entry
             response_data = {
-                    # "error": message,
-                    "message": f"<Error>: {message}",
-                    "status": "failure"
-                }
+                "message": str(message),
+                # "message": f"<Error>: {message}",
+                "status": "failure"
+            }
     
         return web.json_response(response_data, status=status)
    
@@ -125,18 +126,19 @@ async def write_database(request):
         # Create a response JSON
         if status == 200:
             response_data = {
-                    "message": message,
-                    "current_idx":id,
-                    "status": "success"
-                }
+                "message": message,
+                "current_idx":id,
+                "status": "success"
+            }
             
         else:
             response_data = {
-                    # "error": message,
-                    "message": f"<Error>: {message}",
-                    "current_idx":id,
-                    "status": "failure"
-                }
+                # "error": message,
+                # "message": f"<Error>: {message}",
+                "message": str(message),
+                "current_idx":id,
+                "status": "failure"
+            }
             
         return web.json_response(response_data, status=status)  
     
@@ -165,7 +167,8 @@ async def update(request):
         
         else:
             response_data = {
-                "message": f"<Error>: {message}",
+                "message": str(message),
+                # "message": f"<Error>: {message}",
                 "status": "failure"
             }
         return web.json_response(response_data, status=status)        
@@ -197,7 +200,8 @@ async def del_database(request):
         else:
             response_data = {
                 # "error": f'{str(message)}',
-                "message": f"<Error>: {message}",
+                "message": str(message),
+                # "message": f"<Error>: {message}",
                 "status": "failure"
             }    
         
@@ -226,7 +230,8 @@ async def commit(request):
         else:
             response_data = {
                 # "error": message,
-                "message": f"<Error>: {message}",
+                "message": str(message),
+                # "message": f"<Error>: {message}",
                 "status": "failure"
             }
         
@@ -254,7 +259,8 @@ async def rollback(request):
         else:
             response_data = {
                 # "error": message,
-                "message": f"<Error>: {message}",
+                # "message": f"<Error>: {message}",
+                "message": str(message),
                 "status": "failure"
             }
         

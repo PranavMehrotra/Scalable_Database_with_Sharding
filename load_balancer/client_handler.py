@@ -71,7 +71,57 @@ def find_shard_id(stud_id):
         shardT_lock.release_reader()
         return shardT[stud_id_low[idx]][0], err
     
+# function to get the shards and the corresponding range of stud_ids for a given range of stud_ids
+def find_shard_id_range(low, high):
+    global shardT   
+    global stud_id_low
+    global shardT_lock
     
+    if (low > high):
+        return [], "Invalid range: stud_id_low > stud_id_high"
+    
+    err=""
+    limit_left = low
+    limit_right = high + 1  # to include the high value in the range
+    shardT_lock.acquire_reader() 
+    idx_left = bisect.bisect_right(stud_id_low, low)-1
+    
+    if (idx_left > len(stud_id_low)-1):
+        shardT_lock.release_reader()
+        return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
+    
+    if (idx_left<0):
+        idx_left = 0
+        limit_left = 0
+        
+    if (low > stud_id_low[idx_left] + int(shardT[stud_id_low[idx_left]][1])):
+        idx_left += 1
+        limit_left = stud_id_low[idx_left]
+    
+    idx_right = bisect.bisect_right(stud_id_low, high)-1
+    if (idx_right<0):
+        shardT_lock.release_reader()
+        return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
+    
+    if (high > stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1])):
+        limit_right = stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1]) + 1
+        
+    shards = []
+    
+    if (idx_left == idx_right): # if the range lies within a single shard
+        shards.append(tuple(shardT[stud_id_low[idx_left]][0], limit_left, limit_right))
+        shardT_lock.release_reader()
+        return shards, err
+    else:
+        shards.append(tuple(shardT[stud_id_low[idx_left]][0], limit_left, stud_id_low[idx_left] + int(shardT[stud_id_low[idx_left]][1]) + 1))
+        for i in range(idx_left+1, idx_right):
+            shards.append(tuple(shardT[stud_id_low[i]][0], stud_id_low[i], stud_id_low[i] + int(shardT[stud_id_low[i]][1]) + 1))
+        shards.append(tuple(shardT[stud_id_low[idx_right]][0], stud_id_low[idx_right], limit_right))
+        shardT_lock.release_reader()
+        return shards, err
+        
+    
+
 async def communicate_with_server(server, endpoint, payload={}):
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
@@ -79,82 +129,72 @@ async def communicate_with_server(server, endpoint, payload={}):
             
             if endpoint == "copy" or "commit" or "rollback":
                 async with session.get(request_url, json=payload) as response:
-                    response_status = response.status
-                    if response_status == 200:
-                        return True, await response.json()
-                    else:
-                        return False, await response.json()
+                    return response.status, await response.json()
+                    # response_status = response.status
+                    # if response_status == 200:
+                    #     return True, await response.json()
+                    # else:
+                    #     return False, await response.json()
             
             elif endpoint == "read" or "write" or "config":
                 async with session.post(request_url, json=payload) as response:
-                    response_status = response.status
-                    if response_status == 200:
-                        return True, await response.json()
-                    else:
-                        return False, await response.json()
+                    return response.status, await response.json()
                     
             elif endpoint == "update":
                 async with session.put(request_url, json=payload) as response:
-                    response_status = response.status
-                    if response_status == 200:
-                        return True, await response.json()
-                    else:
-                        return False, await response.json()
+                    return response.status, await response.json()
                     
             elif endpoint == "del":
                 async with session.delete(request_url, json=payload) as response:
-                    response_status = response.status
-                    if response_status == 200:
-                        return True, await response.json()
-                    else:
-                        return False, await response.json()
+                    return response.status, await response.json()
             
     except Exception as e:
-        return False, e
+        return 500, {"message": f"{e}"}
 
-async def home(request):
-    global lb
+
+# async def home(request):
+#     global lb
     
-    # Generate a random request id
-    req_id = generate_random_req_id()
+#     # Generate a random request id
+#     req_id = generate_random_req_id()
 
-    # Assign a server to the request using the load balancer
-    server = lb.assign_server(req_id)
-    if (server == ""):
-        # No servers available, return a failure response
-        response_json = {
-            "message": f"<Error> Cannot process request! No active servers!",
-            "status": "failure"
-        }
-        return web.json_response(response_json, status=400)
+#     # Assign a server to the request using the load balancer
+    # server = lb.assign_server(req_id)
+#     if (server == ""):
+#         # No servers available, return a failure response
+#         response_json = {
+#             "message": f"<Error> Cannot process request! No active servers!",
+#             "status": "failure"
+#         }
+#         return web.json_response(response_json, status=400)
     
-    print(f"client_handler: Request {req_id} assigned to server: {server}", flush=True)
+#     print(f"client_handler: Request {req_id} assigned to server: {server}", flush=True)
 
-    try:
-        # Send the request to the server and get the response, use aiohttp
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-            async with session.get(f'http://{server}:{SERVER_PORT}/home') as response:
-            # async with request.app['client_session'].get(f'http://{server}:{SERVER_PORT}/home') as response:
-                response_json = await response.json()
-                response_status = response.status
+#     try:
+#         # Send the request to the server and get the response, use aiohttp
+#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+#             async with session.get(f'http://{server}:{SERVER_PORT}/home') as response:
+#             # async with request.app['client_session'].get(f'http://{server}:{SERVER_PORT}/home') as response:
+#                 response_json = await response.json()
+#                 response_status = response.status
                 
-                # increment count of requests served by the server
-                lb.increment_server_req_count(server)
+#                 # increment count of requests served by the server
+#                 lb.increment_server_req_count(server)
                 
-                # Return the response from the server
-                return web.json_response(response_json, status=response_status, headers={"Cache-Control": "no-store"})
-        # async with request.app['client_session'].get(f'http://{server}:{SERVER_PORT}/home') as response:
-            # response_json = await response.json()
-            # response_status = response.status
-            # # Return the response from the server
-            # return web.json_response(response_json, status=response_status, headers={"Cache-Control": "no-store"})
-    except:
-        # Request failed, return a failure response
-        response_json = {
-            "message": f"<Error> Request Failed",
-            "status": "failure"
-        }
-        return web.json_response(response_json, status=400)
+#                 # Return the response from the server
+#                 return web.json_response(response_json, status=response_status, headers={"Cache-Control": "no-store"})
+#         # async with request.app['client_session'].get(f'http://{server}:{SERVER_PORT}/home') as response:
+#             # response_json = await response.json()
+#             # response_status = response.status
+#             # # Return the response from the server
+#             # return web.json_response(response_json, status=response_status, headers={"Cache-Control": "no-store"})
+#     except:
+#         # Request failed, return a failure response
+#         response_json = {
+#             "message": f"<Error> Request Failed",
+#             "status": "failure"
+#         }
+#         return web.json_response(response_json, status=400)
     
 async def add_server_handler(request):
     global lb
@@ -316,15 +356,237 @@ async def rep_handler(request):
     return web.json_response(response_json, status=200)
 
 ## Nyati's changes here: 
-async def read_data_handler(request):
-    pass
 
+# function to read a range of data entries from the database
+async def read_data_handler(request):
+    global lb
+    
+    print(f"client_handler: Received Request to read a range of data entries", flush=True)
+    default_response_json = {
+        "message": f"<Error> Internal Server Error: The requested data could not be read",
+        "status": "failure"
+    }
+    
+    try:
+        request_json = await request.json()
+        
+        if 'Stud_id' not in request_json:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        
+        stud_id_obj = request_json.get("Stud_id", {})
+        
+        if 'low' not in stud_id_obj or 'high' not in stud_id_obj:
+            response_json = {
+                "message": f"<Error> Invalid payload format: Both low and high Stud_ids are required for reading a range of entries",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        shard_range_list, err = find_shard_id_range(stud_id_obj["low"], stud_id_obj["high"])
+        if len(shard_range_list)==0:
+            response_json = {
+                "message": f"<Error> {err}",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        data_read = []
+        shards_read = []
+        for entry in shard_range_list:
+            shard_id=entry[0]
+            low=entry[1]
+            high=entry[2]
+            
+            req_id = generate_random_req_id()
+            # NO NEED TO ACQUIRE READ LOCK  OF SHARD CONSISTENT HASH HERE, AS THE LOCK IS ALREADY ACQUIRED BY THE 'ASSIGN_SERVER' FUNCTION 
+            server =lb.assign_server(req_id, shard_id)
+            
+            server_json = {
+                "shard": shard_id,
+                "Stud_id": {"low": low, "high": high}
+            }
+            
+            status, response = await communicate_with_server(server, "read", server_json)
+            if status==200:
+                data_read.append(response.get("data", []))
+                shards_read.append(shard_id)
+            else:
+                data_read = []
+                shards_read = []
+                return web.json_response(default_response_json, status=500)
+            
+        response_json = {
+            "shards_queried": shards_read,
+            "data": data_read,
+            "status": "success"
+        }
+        return web.json_response(response_json, status=200)
+    
+    except Exception as e:
+        response_json = {
+            "message": f"<Error> Invalid payload format: {e}",
+            "status": "failure"
+        }
+        return web.json_response(response_json, status=400)
+                
+                
+# function to write a bunch of data entries across all shard replicas
 async def write_data_handler(request):
     pass
 
+# function to update an existing data entry across all shard replicas
 async def update_data_handler(request):
-    pass
+    global lb
+    
+    print(f"client_handler: Received Request to update a data entry", flush=True)
+    default_response_json = {
+        "message": f"<Error> Internal Server Error: The requested Stud_id could not be updated",
+        "status": "failure"
+    }
+    
+    try:
+        request_json = await request.json()
+        
+        if 'Stud_id' not in request_json:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+    
+        if 'data' not in request_json:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'data' field missing in request",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        stud_id=request_json.get("Stud_id")
+        shard_id, err = find_shard_id(stud_id)
+        if shard_id=="":
+            response_json = {
+                "message": f"<Error> {err}",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
 
+        # servers to which the update request will be sent corresponding to the shard_id
+        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        servers = lb.list_shard_servers(shard_id)
+        lb.consistent_hashing[shard_id].lock.release_reader()
+        
+        # if no servers are available for the shard, return a failure response
+        if len(servers)==0:
+            print(f"client_handler: No active servers for shard: {shard_id}", flush=True)
+            return web.json_response(default_response_json, status=500)
+        
+        servers_updated = []
+        
+        server_json = {
+            "shard": shard_id,
+            "Stud_id": stud_id,
+            "data": request_json.get("data", {})
+        }
+        
+        error_msg = ""
+        error_flag = False
+        rollback = False
+        
+        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        for server in servers:
+            # update the entry on the servers one by one
+            status, response = await communicate_with_server(server, "update", server_json)
+            if status==200:
+                servers_updated.append(server)
+            else:
+                if status!=500:
+                    error_msg = response.get("message", "Unknown Error")
+                    error_flag = True
+                rollback = True
+                break
+        
+        lb.consistent_hashing[shard_id].lock.release_reader()
+        
+        if rollback:
+            # rollback the update operation on the servers
+            for server in servers_updated:
+                retry_cntr = 3
+                while retry_cntr > 0:
+                    status, response = await communicate_with_server(server, "rollback")
+                    if status==200:
+                        break
+                    retry_cntr -= 1
+                
+                if retry_cntr == 0:
+                    print(f"client_handler: Rollback failed on server: {server}", flush=True)
+                    print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
+                    
+                    ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a rollback failure
+                    ## FOR NOW: Just return a failure response explicitly stating data inconsistency
+                    response_json = {
+                        "message": f"<Error> Data inconsistency: The requested update created an inconsistency in the database",
+                        "status": "failure"
+                    }
+                    return web.json_response(response_json, status=500)
+             
+            if error_flag: # it means some other error than an exception occurred while updating the servers
+                response_json = {
+                    "message": f"<Error> {error_msg}",
+                    "status": "failure"
+                }
+                return web.json_response(response_json, status=400)
+                    
+            else:   
+                return web.json_response(default_response_json, status=500)
+            
+        # commit the update operation on all the servers
+        else:
+            
+            lb.consistent_hashing[shard_id].lock.acquire_reader()
+            assert (servers_updated == servers) # as all servers should be updated
+            for server in servers_updated:
+                retry_cntr = 3
+                while retry_cntr > 0:
+                    status, response = await communicate_with_server(server, "commit")
+                    if status==200:
+                        break
+                    retry_cntr -= 1
+                
+                if retry_cntr == 0:
+                    lb.consistent_hashing[shard_id].lock.release_reader()
+                    print(f"client_handler: Commit failed on server: {server}", flush=True)
+                    print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
+                    
+                    ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a commit failure
+                    ## FOR NOW: Just return a failure response explicitly stating data inconsistency
+                    response_json = {
+                        "message": f"<Error> Data inconsistency: The requested update created an inconsistency in the database",
+                        "status": "failure"
+                    }
+                    return web.json_response(response_json, status=500)
+                
+            lb.consistent_hashing[shard_id].lock.release_reader()
+            
+            response_json = {
+                "message": f"Data entry with Stud_id:{stud_id} updated in the database",
+                "status": "success"
+            }
+            return web.json_response(response_json, status=200)
+        
+    except Exception as e:
+        response_json = {
+            "message": f"<Error> Invalid payload format: {e}",
+            "status": "failure"
+        }
+        return web.json_response(response_json, status=400)
+                    
+                
+# function to delete a data entry from all shard replicas
 async def del_data_handler(request):
     global lb
     
@@ -339,15 +601,13 @@ async def del_data_handler(request):
         
         if 'Stud_id' not in request_json:
             response_json = {
-                "message": f"<Error> 'Stud_id' field missing in request",
+                "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
                 "status": "failure"
             }
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
-        
         shard_id, err = find_shard_id(stud_id)
-        
         if shard_id=="":
             response_json = {
                 "message": f"<Error> {err}",
@@ -371,15 +631,20 @@ async def del_data_handler(request):
             "Stud_id": stud_id
         }
         
+        error_msg = ""
+        error_flag = False
         rollback = False
 
         lb.consistent_hashing[shard_id].lock.acquire_reader()
         for server in servers:            
             # delete the entry from the servers one by one
             status, response = await communicate_with_server(server, "del", server_json)
-            if status:
+            if status==200:
                 servers_updated.append(server)
             else:
+                if status!=500:
+                    error_msg = response.get("message", "Unknown Error")
+                    error_flag = True
                 rollback = True
                 break
           
@@ -388,47 +653,55 @@ async def del_data_handler(request):
         if rollback:
             # rollback the delete operation on the servers
             for server in servers_updated:
-                retry_cntr = 5
+                retry_cntr = 3
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "rollback")
-                    if status:
+                    if status==200:
                         break
                     retry_cntr -= 1
                 
                 if retry_cntr == 0:
-                    print(f"client_handler: Rollback failed on server: {server}")
+                    print(f"client_handler: Rollback failed on server: {server}", flush=True)
+                    print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
                     
                     ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a rollback failure
-                    
                     ## FOR NOW: Just return a failure response explicitly stating data inconsistency
                     response_json = {
                         "message": f"<Error> Data inconsistency: The requested deletion created an inconsistency in the database",
                         "status": "failure"
                     }
                     return web.json_response(response_json, status=500)
+            
+            if error_flag: # it means some other error than an exception occurred while deleting the entry from the servers
+                response_json = {
+                    "message": f"<Error> {error_msg}",
+                    "status": "failure"
+                }
+                return web.json_response(response_json, status=400)
                     
-            return web.json_response(default_response_json, status=500)  
+            else:
+                return web.json_response(default_response_json, status=500)  
       
       
         # commit the delete operation on all the servers  
         else:
  
             lb.consistent_hashing[shard_id].lock.acquire_reader()
-            assert (servers_updated == servers)
+            assert (servers_updated == servers) # as all servers should be updated
             for server in servers_updated:
-                retry_cntr = 5
+                retry_cntr = 3
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "commit")
-                    if status:
+                    if status==200:
                         break
                     retry_cntr -= 1 
 
                 if retry_cntr == 0:
-                    print(f"client_handler: Commit failed on server: {server}")
                     lb.consistent_hashing[shard_id].lock.release_reader()
+                    print(f"client_handler: Commit failed on server: {server}", flush=True)
+                    print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)                   
                     
                     ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a commit failure
-                    
                     ## FOR NOW: Just return a failure response explicitly stating data inconsistency
                     response_json = {
                         "message": f"<Error> Data inconsistency: The requested deletion created an inconsistency in the database",
@@ -439,14 +712,14 @@ async def del_data_handler(request):
             lb.consistent_hashing[shard_id].lock.release_reader()
             
             response_json = {
-                "message": f"Data entry with Stud_id:{stud_id} removed from all shard replicas",
+                "message": f"Data entry with Stud_id:{stud_id} removed from all replicas",
                 "status": "success"
             }
             return web.json_response(response_json, status=200)
         
     except Exception as e:
         response_json = {
-            "message": f"<Error> Invalid payload format",
+            "message": f"<Error> Invalid payload format: {e}",
             "status": "failure"
         }
         return web.json_response(response_json, status=400)
@@ -527,7 +800,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
     }
     # if not await config_server(db_server_hostname, payload):
     status, response = await communicate_with_server(db_server_hostname, "config", payload)
-    if not status:
+    if status!=200:
         response_json = {
             "message": f"<Error> Failed to configure the db_server",
             "status": "failure"
@@ -545,7 +818,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
     # print(f"client_handler: Writing ShardT to db_server: {payload}", flush=True)
     status, response = await communicate_with_server(db_server_hostname, "write", payload)
     # if not await write_server(db_server_hostname, payload):
-    if not status:
+    if status!=200:
         response_json = {
             "message": f"<Error> Failed to write ShardT table to the db_server",
             "status": "failure"
@@ -561,7 +834,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
             payload["data"].append(dict(zip(MapT_schema["columns"], [shard, server])))
     # if not await write_server(db_server_hostname, payload):
     status, response = await communicate_with_server(db_server_hostname, "write", payload)
-    if not status:
+    if status!=200:
         response_json = {
             "message": f"<Error> Failed to write MapT table to the db_server",
             "status": "failure"
@@ -694,9 +967,10 @@ async def init_handler(request):
         # Send a POST request to the server /config endpoint to initialize the database
         # if not await config_server(server, payload):
         status, response = await communicate_with_server(server, "config", payload)
-        if not status:
+        if status!=200:
+            error=str(response.get("message", "Unknown Error"))
             response_json = {
-                "message": f"<Error> Failed to configure server {server}",
+                "message": f"<Error> Failed to configure server {server}: {error}", 
                 "status": "failure"
             }
             return web.json_response(response_json, status=400)
@@ -833,7 +1107,7 @@ def run_load_balancer():
     else:
         print(f"client_handler: DB server not running, starting fresh", flush=True)
     app = web.Application()
-    app.router.add_get('/home', home)
+    # app.router.add_get('/home', home)
     app.router.add_post('/add', add_server_handler)
     app.router.add_delete('/rm', remove_server_handler)
     app.router.add_get('/rep', rep_handler)
