@@ -160,8 +160,8 @@ class Manager:
             
             valid_idx = res[0][0]
 
-            if(curr_idx!=valid_idx+1):                
-                return "Invalid current index provided",400,valid_idx+1
+            # if(curr_idx!=valid_idx+1):                
+            #     return "Invalid current index provided",400,valid_idx
             
             row_str = ''
             
@@ -170,7 +170,7 @@ class Manager:
 
                 if missing_columns:
                     missing_column = missing_columns.pop()  # Get the first missing column
-                    return f"{missing_column} not found", 400, valid_idx+1
+                    return f"{missing_column} not found", 400, valid_idx
                 
                 # row = ''
                 ### 1. Why is explicit check for string type required? Can't we just use f"{v[k]},"?
@@ -193,12 +193,12 @@ class Manager:
             message, status = self.sql_handler.Insert(tablename, row_str,self.schema_str)
             
             if status != 200:    
-                return message, status,valid_idx+1
+                return message, status,valid_idx
             
-            return "Data entries added", 200, valid_idx+num_entry+1
+            return "Data entries added", 200, valid_idx+num_entry
         
         except Exception as e:
-            return e, 500, valid_idx
+            return e, 500, -1
         
     def Update_database(self,request_json):
        

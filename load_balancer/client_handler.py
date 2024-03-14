@@ -92,7 +92,7 @@ def find_shard_id_range(low, high):
     
     if (idx_left<0):
         idx_left = 0
-        limit_left = 0
+        limit_left = stud_id_low[idx_left]
         
     if (low > stud_id_low[idx_left] + int(shardT[stud_id_low[idx_left]][1])):
         idx_left += 1
@@ -103,20 +103,20 @@ def find_shard_id_range(low, high):
         shardT_lock.release_reader()
         return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
     
-    if (high > stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1])):
-        limit_right = stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1]) + 1
+    if (high >= stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1])):
+        limit_right = stud_id_low[idx_right] + int(shardT[stud_id_low[idx_right]][1])
         
     shards = []
     
     if (idx_left == idx_right): # if the range lies within a single shard
-        shards.append(tuple(shardT[stud_id_low[idx_left]][0], limit_left, limit_right))
+        shards.append(tuple((shardT[stud_id_low[idx_left]][0], limit_left, limit_right)))
         shardT_lock.release_reader()
         return shards, err
     else:
-        shards.append(tuple(shardT[stud_id_low[idx_left]][0], limit_left, stud_id_low[idx_left] + int(shardT[stud_id_low[idx_left]][1]) + 1))
+        shards.append(tuple((shardT[stud_id_low[idx_left]][0], limit_left, stud_id_low[idx_left] + int(shardT[stud_id_low[idx_left]][1]))))
         for i in range(idx_left+1, idx_right):
-            shards.append(tuple(shardT[stud_id_low[i]][0], stud_id_low[i], stud_id_low[i] + int(shardT[stud_id_low[i]][1]) + 1))
-        shards.append(tuple(shardT[stud_id_low[idx_right]][0], stud_id_low[idx_right], limit_right))
+            shards.append(tuple((shardT[stud_id_low[i]][0], stud_id_low[i], stud_id_low[i] + int(shardT[stud_id_low[i]][1]))))
+        shards.append(tuple((shardT[stud_id_low[idx_right]][0], stud_id_low[idx_right], limit_right)))
         shardT_lock.release_reader()
         return shards, err
         
@@ -404,7 +404,7 @@ async def read_data_handler(request):
             
             req_id = generate_random_req_id()
             # NO NEED TO ACQUIRE READ LOCK  OF SHARD CONSISTENT HASH HERE, AS THE LOCK IS ALREADY ACQUIRED BY THE 'ASSIGN_SERVER' FUNCTION 
-            server =lb.assign_server(req_id, shard_id)
+            server =lb.assign_server(shard_id, req_id)
             
             server_json = {
                 "shard": shard_id,
@@ -475,10 +475,12 @@ async def update_data_handler(request):
             }
             return web.json_response(response_json, status=400)
 
+        temp_lock=lb.consistent_hashing[shard_id].lock
+    
         # servers to which the update request will be sent corresponding to the shard_id
-        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        temp_lock.acquire_reader()
         servers = lb.list_shard_servers(shard_id)
-        lb.consistent_hashing[shard_id].lock.release_reader()
+        temp_lock.release_reader()
         
         # if no servers are available for the shard, return a failure response
         if len(servers)==0:
@@ -497,7 +499,7 @@ async def update_data_handler(request):
         error_flag = False
         rollback = False
         
-        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        temp_lock.acquire_writer()
         for server in servers:
             # update the entry on the servers one by one
             status, response = await communicate_with_server(server, "update", server_json)
@@ -509,8 +511,7 @@ async def update_data_handler(request):
                     error_flag = True
                 rollback = True
                 break
-        
-        lb.consistent_hashing[shard_id].lock.release_reader()
+
         
         if rollback:
             # rollback the update operation on the servers
@@ -523,6 +524,7 @@ async def update_data_handler(request):
                     retry_cntr -= 1
                 
                 if retry_cntr == 0:
+                    temp_lock.release_writer()
                     print(f"client_handler: Rollback failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
                     
@@ -532,13 +534,16 @@ async def update_data_handler(request):
                         "message": f"<Error> Data inconsistency: The requested update created an inconsistency in the database",
                         "status": "failure"
                     }
+
                     return web.json_response(response_json, status=500)
              
+            temp_lock.release_writer()
             if error_flag: # it means some other error than an exception occurred while updating the servers
                 response_json = {
                     "message": f"<Error> {error_msg}",
                     "status": "failure"
                 }
+                
                 return web.json_response(response_json, status=400)
                     
             else:   
@@ -547,7 +552,6 @@ async def update_data_handler(request):
         # commit the update operation on all the servers
         else:
             
-            lb.consistent_hashing[shard_id].lock.acquire_reader()
             assert (servers_updated == servers) # as all servers should be updated
             for server in servers_updated:
                 retry_cntr = 3
@@ -558,7 +562,7 @@ async def update_data_handler(request):
                     retry_cntr -= 1
                 
                 if retry_cntr == 0:
-                    lb.consistent_hashing[shard_id].lock.release_reader()
+                    temp_lock.release_writer()
                     print(f"client_handler: Commit failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
                     
@@ -568,9 +572,10 @@ async def update_data_handler(request):
                         "message": f"<Error> Data inconsistency: The requested update created an inconsistency in the database",
                         "status": "failure"
                     }
+                    
                     return web.json_response(response_json, status=500)
                 
-            lb.consistent_hashing[shard_id].lock.release_reader()
+            temp_lock.release_writer()
             
             response_json = {
                 "message": f"Data entry with Stud_id:{stud_id} updated in the database",
@@ -1129,3 +1134,54 @@ def run_load_balancer():
 
     for thread in hb_threads.values():
         thread.join()
+
+if __name__ == "__main__":
+
+    shardT = {}
+    stud_id_low = []
+    # shardT["sh1"] = [0, 100, 0]
+    # shardT["sh2"] = [101, 200, 0]
+    # shardT["sh3"] = [201, 300, 0]
+    # shardT["sh4"] = [301, 400, 0]
+    # shardT["sh5"] = [401, 500, 0]
+    # shardT["sh6"] = [501, 600, 0]
+    # shardT["sh7"] = [601, 700, 0]
+    # shardT["sh8"] = [701, 800, 0]
+    # shardT["sh9"] = [801, 900, 0]
+    # shardT["sh10"] = [901, 1000, 0]
+    shardT[0] = ["sh1", 100, 0]
+    shardT[101] = ["sh2", 100, 0]
+    shardT[201] = ["sh3", 100, 0]
+    shardT[301] = ["sh4", 100, 0]
+    shardT[401] = ["sh5", 100, 0]
+    shardT[501] = ["sh6", 79, 0]
+    shardT[580] = ["sh7", 100, 0]
+    shardT[701] = ["sh8", 100, 0]
+    shardT[801] = ["sh9", 100, 0]
+    shardT[901] = ["sh10", 100, 0]
+    shardT[1001] = ["sh11", 1, 0]
+    shardT[1002] = ["sh12", 0, 0]
+    
+    
+    stud_id_low = [0, 101, 201, 301, 402, 501, 580, 701, 801, 901, 1001, 1002]
+    
+    # shard_id1, err = find_shard_id(51)
+    # print(f"Shard ID for 51: {shard_id1}, {err}")
+    # shard_id2, err = find_shard_id(0)
+    # print(f"Shard ID for 0: {shard_id2}, {err}")
+    # shard_id3, err = find_shard_id(-1)
+    # print(f"Shard ID for -1: {shard_id3}, {err}")
+    # shard_id4, err = find_shard_id(1000)
+    # print(f"Shard ID for 1000: {shard_id4}, {err}")
+    # shard_id5, err = find_shard_id(1001)
+    # print(f"Shard ID for 1001: {shard_id5}, {err}")
+    # shard_id6, err = find_shard_id(1002)
+    # print(f"Shard ID for 1002: {shard_id6}, {err}")
+
+    
+    low = 0
+    high= 101
+    shards, err = find_shard_id_range(low, high)
+    print(f"Shards for the range: {low}-{high}: {shards}, {err}")
+    
+    
