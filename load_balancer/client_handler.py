@@ -434,10 +434,199 @@ async def read_data_handler(request):
         }
         return web.json_response(response_json, status=400)
                 
+
+
+# function to write data entries of one shard replica in multiple servers, to be called by the write_data_handler
+async def write_one_shard(shard_id, data):
+    global lb
+    
+    temp_lock=lb.consistent_hashing[shard_id].lock
+    temp_lock.acquire_reader()
+    servers = lb.list_shard_servers(shard_id)
+    temp_lock.release_reader()
+    
+    # if no servers are available for the shard, return a failure response
+    if len(servers)==0:
+        print(f"client_handler: No active servers for shard: {shard_id}", flush=True)
+        return 500, {"message": f"No active servers for shard: {shard_id}"}
+    
+    servers_updated = []
+    
+    error_msg = ""
+    error_flag = False
+    rollback = False
+    
+    temp_lock.acquire_writer()
+    shardT_lock.acquire_reader()
+    valid_idx = shardT[shard_id][2]
+    shardT_lock.release_reader()
+    payload = {
+        "shard": shard_id,
+        "curr_idx": valid_idx,
+        "data": data
+    }
+    for server in servers:
+        # write the entry on the servers one by one
+        status, response = await communicate_with_server(server, "write", payload)
+        if status==200:
+            servers_updated.append(server)
+        else:
+            if status!=500:
+                error_msg = response.get("message", "Unknown Error")
+                error_flag = True
+            rollback = True
+            break
+    
+    if rollback:
+        # rollback the write operation on the servers
+        for server in servers_updated:
+            retry_cntr = 3
+            while retry_cntr > 0:
+                status, response = await communicate_with_server(server, "rollback")
+                if status==200:
+                    break
+                retry_cntr -= 1
+            
+            if retry_cntr == 0:
+                temp_lock.release_writer()
+                print(f"client_handler: Rollback failed on server: {server}", flush=True)
+                print(f"client_handler: Data inconsistency: The requested write created an inconsistency in the database", flush=True)
                 
+                ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a rollback failure
+                ## FOR NOW: Just return a failure response explicitly stating data inconsistency
+                response_json = {
+                    "message": f"<Error> Data inconsistency: The requested write created an inconsistency in the database",
+                    "status": "failure"
+                }
+                return 500, response_json
+        
+        temp_lock.release_writer()
+        if error_flag: # it means some other error than an exception occurred while writing the entry to the servers
+            response_json = {
+                "message": f"<Error> {error_msg}",
+                "status": "failure"
+            }
+            return 400, response_json
+                
+        else:
+            return 500, {"message": f"Internal Server Error: The requested data could not be written"}
+        
+    # commit the write operation on all the servers
+    else:
+        assert (servers_updated == servers)
+        for server in servers_updated:
+            retry_cntr = 3
+            while retry_cntr > 0:
+                status, response = await communicate_with_server(server, "commit")
+                if status==200:
+                    break
+                retry_cntr -= 1
+            
+            if retry_cntr == 0:
+                temp_lock.release_writer()
+                print(f"client_handler: Commit failed on server: {server}", flush=True)
+                print(f"client_handler: Data inconsistency: The requested write created an inconsistency in the database", flush=True)
+                
+                ## TO-DO: Need to handle this case of how to make all shard copies consistent in case of a commit failure
+                ## FOR NOW: Just return a failure response explicitly stating data inconsistency
+                response_json = {
+                    "message": f"<Error> Data inconsistency: The requested write created an inconsistency in the database",
+                    "status": "failure"
+                }
+                return 500, response_json
+        # Update the valid_idx in the shardT
+        shardT_lock.acquire_reader()
+        shardT[shard_id][2] = valid_idx + len(data)
+        shardT_lock.release_reader()
+        temp_lock.release_writer()
+        return 200, {"message": "success"}
+
+
 # function to write a bunch of data entries across all shard replicas
 async def write_data_handler(request):
-    pass
+    global lb
+    
+    print(f"client_handler: Received Request to write data entries", flush=True)
+    default_response_json = {
+        "message": f"<Error> Internal Server Error: The requested data could not be written",
+        "status": "failure"
+    }
+    
+    try:
+        request_json = await request.json()
+        
+        if 'data' not in request_json:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'data' field missing in request",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        data_list=list(request_json["data"])
+        if len(data_list)==0:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'data' field is empty",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
+        # Sort the data entries based on the Stud_id
+        data_list.sort(key=lambda x: x["Stud_id"])
+        # Find maximum and minimum Stud_id in the data entries
+        min_stud_id = data_list[0]["Stud_id"]
+        max_stud_id = data_list[-1]["Stud_id"]
+        # Find the shards corresponding to the range of Stud_ids
+        shard_range_list, err = find_shard_id_range(min_stud_id, max_stud_id)
+        if len(shard_range_list)==0:
+            response_json = {
+                "message": f"<Error> {err}",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+
+        # shard_data = {}
+        data_idx = 0
+        data_len = len(data_list)
+        last_idx = 0
+        # To write the data entries to the shards all at once, using async functions
+        tasks = []
+        for shard in shard_range_list:
+            # low = shard[1]
+            high = shard[2]
+            shard_id = shard[0]
+            while data_idx < data_len and data_list[data_idx]["Stud_id"] < high:
+                data_idx += 1
+            
+            # shard_data[shard_id] = data_list[last_idx:data_idx]
+            tasks.append(write_one_shard(shard_id, data_list[last_idx:data_idx]))
+            last_idx = data_idx
+        
+        assert (data_idx == data_len)
+
+        # Wait for all the writes to complete
+        results = await asyncio.gather(*tasks)
+        # Check if all the writes were successful
+        success_flag = True
+        for status, response in results:
+            if status!=200:
+                print(f"client_handler: <Error> Failed to write to shard: {shard_id}, messsage: {response.get('message', 'Internal Server Error')}", flush=True)
+                success_flag = False
+    
+        if not success_flag:
+            return web.json_response(default_response_json, status=500)
+                
+        response_json = {
+            "message": f"Data entries written to the database",
+            "status": "success"
+        }
+        return web.json_response(response_json, status=200)
+    
+    except Exception as e:
+        response_json = {
+            "message": f"<Error> Invalid payload format: {e}",
+            "status": "failure"
+        }
+        return web.json_response(response_json, status=400)
 
 # function to update an existing data entry across all shard replicas
 async def update_data_handler(request):
@@ -584,6 +773,12 @@ async def update_data_handler(request):
             return web.json_response(response_json, status=200)
         
     except Exception as e:
+        ## Not Safe to release the lock here, as the lock might not have been acquired by this function
+        # # Check if the lock was acquired before releasing it
+        # if temp_lock.acquired_by_reader():
+        #     temp_lock.release_reader()
+        # elif temp_lock.acquired_by_writer():
+        #     temp_lock.release_writer()
         response_json = {
             "message": f"<Error> Invalid payload format: {e}",
             "status": "failure"
@@ -620,9 +815,11 @@ async def del_data_handler(request):
             }
             return web.json_response(response_json, status=400)
         
-        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        temp_lock=lb.consistent_hashing[shard_id].lock
+
+        temp_lock.acquire_reader()
         servers = lb.list_shard_servers(shard_id)
-        lb.consistent_hashing[shard_id].lock.release_reader()
+        temp_lock.release_reader()
         
         # if no servers are available for the shard, return a failure response
         if len(servers)==0:
@@ -640,7 +837,7 @@ async def del_data_handler(request):
         error_flag = False
         rollback = False
 
-        lb.consistent_hashing[shard_id].lock.acquire_reader()
+        temp_lock.acquire_writer()
         for server in servers:            
             # delete the entry from the servers one by one
             status, response = await communicate_with_server(server, "del", server_json)
@@ -653,7 +850,6 @@ async def del_data_handler(request):
                 rollback = True
                 break
           
-        lb.consistent_hashing[shard_id].lock.release_reader()
         
         if rollback:
             # rollback the delete operation on the servers
@@ -666,6 +862,7 @@ async def del_data_handler(request):
                     retry_cntr -= 1
                 
                 if retry_cntr == 0:
+                    temp_lock.release_writer()
                     print(f"client_handler: Rollback failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
                     
@@ -677,6 +874,7 @@ async def del_data_handler(request):
                     }
                     return web.json_response(response_json, status=500)
             
+            temp_lock.release_writer()
             if error_flag: # it means some other error than an exception occurred while deleting the entry from the servers
                 response_json = {
                     "message": f"<Error> {error_msg}",
@@ -691,7 +889,6 @@ async def del_data_handler(request):
         # commit the delete operation on all the servers  
         else:
  
-            lb.consistent_hashing[shard_id].lock.acquire_reader()
             assert (servers_updated == servers) # as all servers should be updated
             for server in servers_updated:
                 retry_cntr = 3
@@ -702,7 +899,7 @@ async def del_data_handler(request):
                     retry_cntr -= 1 
 
                 if retry_cntr == 0:
-                    lb.consistent_hashing[shard_id].lock.release_reader()
+                    temp_lock.release_writer()
                     print(f"client_handler: Commit failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)                   
                     
@@ -713,8 +910,13 @@ async def del_data_handler(request):
                         "status": "failure"
                     }
                     return web.json_response(response_json, status=500)
-  
-            lb.consistent_hashing[shard_id].lock.release_reader()
+
+            # Update the valid_idx in the shardT, without acquiring writer lock
+            shardT_lock.acquire_reader()
+            shardT[shard_id][2] -= 1
+            shardT_lock.release_reader()
+
+            temp_lock.release_writer()
             
             response_json = {
                 "message": f"Data entry with Stud_id:{stud_id} removed from all replicas",

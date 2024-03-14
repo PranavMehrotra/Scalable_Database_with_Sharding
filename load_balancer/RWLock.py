@@ -30,6 +30,12 @@ class RWLock:
         self.__no_writers.release()
         self.__write_switch.unlock(self.__no_readers)
 
+    def acquired_by_writer(self):
+        return self.__write_switch.locked()
+    
+    def acquired_by_reader(self):
+        return self.__read_switch.locked()
+
 
 # Class to implement a lightswitch, which is a synchronization tool that allows many threads to lock a semaphore/lock,
 # where first thread acquires the semaphore/lock and last thread releases the semaphore/lock
@@ -51,3 +57,6 @@ class LightSwitch:
         if self.counter == 0:
             semaphore.release()
         self.mutex.release()
+
+    def locked(self):
+        return self.counter > 0
