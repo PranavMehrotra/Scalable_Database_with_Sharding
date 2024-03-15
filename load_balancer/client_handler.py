@@ -55,12 +55,12 @@ def find_shard_id(stud_id):
     if (idx<0):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: Stud_id does not exist in the database"
-        return "", err
+        return "", 0, err
     # if stud_id is greater than the shard size, then it is invalid
     elif (stud_id >= stud_id_low[idx][1]):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: Stud_id does not exist in the database"
-        return "", err
+        return "", 0, err
     
     # # if stud_id is greater than the highest valid index in the shard, then it is invalid
     # elif (stud_id > shardT[stud_id_low[idx]][2]):
@@ -71,7 +71,7 @@ def find_shard_id(stud_id):
     else:
         shard_id = shardT[stud_id_low[idx][0]][0]
         shardT_lock.release_reader()
-        return shard_id, err
+        return shard_id, stud_id_low[idx][0], err
     
 # function to get the shards and the corresponding range of stud_ids for a given range of stud_ids
 def find_shard_id_range(low, high):
@@ -118,14 +118,14 @@ def find_shard_id_range(low, high):
     shards = []
     
     if (idx_left == idx_right): # if the range lies within a single shard
-        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right))
+        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right, stud_id_low[idx_left][0]))
         shardT_lock.release_reader()
         return shards, err
     else:
-        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, stud_id_low[idx_left][1]))
+        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, stud_id_low[idx_left][1], stud_id_low[idx_left][0]))
         for i in range(idx_left+1, idx_right):
-            shards.append((shardT[stud_id_low[i][0]][0], stud_id_low[i][0], stud_id_low[i][1]))
-        shards.append((shardT[stud_id_low[idx_right][0]][0], stud_id_low[idx_right][0], limit_right))
+            shards.append((shardT[stud_id_low[i][0]][0], stud_id_low[i][0], stud_id_low[i][1], stud_id_low[i][0]))
+        shards.append((shardT[stud_id_low[idx_right][0]][0], stud_id_low[idx_right][0], limit_right, stud_id_low[idx_right][0]))
         shardT_lock.release_reader()
         return shards, err
         
@@ -136,7 +136,7 @@ async def communicate_with_server(server, endpoint, payload={}):
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
             request_url = f'http://{server}:{SERVER_PORT}/{endpoint}'
             
-            if endpoint == "copy" or "commit" or "rollback":
+            if endpoint == "copy" or endpoint == "commit" or endpoint == "rollback":
                 async with session.get(request_url, json=payload) as response:
                     return response.status, await response.json()
                     # response_status = response.status
@@ -145,7 +145,7 @@ async def communicate_with_server(server, endpoint, payload={}):
                     # else:
                     #     return False, await response.json()
             
-            elif endpoint == "read" or "write" or "config":
+            elif endpoint == "read" or endpoint == "write" or endpoint == "config":
                 async with session.post(request_url, json=payload) as response:
                     return response.status, await response.json()
                     
@@ -156,6 +156,8 @@ async def communicate_with_server(server, endpoint, payload={}):
             elif endpoint == "del":
                 async with session.delete(request_url, json=payload) as response:
                     return response.status, await response.json()
+            else:
+                return 500, {"message": "Invalid endpoint"}
             
     except Exception as e:
         return 500, {"message": f"{e}"}
@@ -509,9 +511,9 @@ async def read_data_handler(request):
 
 
 # function to write data entries of one shard replica in multiple servers, to be called by the write_data_handler
-async def write_one_shard(shard_id, data):
+async def write_one_shard(shard_id, shard_stud_id_low, data):
     global lb
-    
+    print(f"client_handler: Write request for shard: {shard_id}, data: {data}", flush=True)
     temp_lock=lb.consistent_hashing[shard_id].lock
     temp_lock.acquire_reader()
     servers = lb.list_shard_servers(shard_id)
@@ -527,16 +529,25 @@ async def write_one_shard(shard_id, data):
     error_msg = ""
     error_flag = False
     rollback = False
-    
-    temp_lock.acquire_writer()
-    shardT_lock.acquire_reader()
-    valid_idx = shardT[shard_id][2]
-    shardT_lock.release_reader()
-    payload = {
-        "shard": shard_id,
-        "curr_idx": valid_idx,
-        "data": data
-    }
+    try:
+        temp_lock.acquire_writer()
+        shardT_lock.acquire_reader()
+        valid_idx = shardT[shard_stud_id_low][2]
+        shardT_lock.release_reader()
+        payload = {
+            "shard": shard_id,
+            "curr_idx": valid_idx,
+            "data": data
+        }
+    # Check KeyErrors and other exceptions
+    except Exception as e:
+        temp_lock.release_writer()
+        response_json = {
+            "message": f"<Error> {e}",
+            "status": "failure"
+        }
+        return 400, response_json
+    print(f"client_handler: Writing data to shard: {shard_id}, data: {data}", flush=True)
     for server in servers:
         # write the entry on the servers one by one
         status, response = await communicate_with_server(server, "write", payload)
@@ -550,6 +561,8 @@ async def write_one_shard(shard_id, data):
             break
     
     if rollback:
+        print(f"client_handler: Rollback required for shard: {shard_id}", flush=True)
+        print(f"client_handler: Error: {error_msg}", flush=True)
         # rollback the write operation on the servers
         for server in servers_updated:
             retry_cntr = 3
@@ -608,7 +621,7 @@ async def write_one_shard(shard_id, data):
                 return 500, response_json
         # Update the valid_idx in the shardT
         shardT_lock.acquire_reader()
-        shardT[shard_id][2] = valid_idx + len(data)
+        shardT[shard_stud_id_low][2] = valid_idx + len(data)
         shardT_lock.release_reader()
         temp_lock.release_writer()
         return 200, {"message": "success"}
@@ -641,7 +654,6 @@ async def write_data_handler(request):
                 "status": "failure"
             }
             return web.json_response(response_json, status=400)
-        
         # Sort the data entries based on the Stud_id
         data_list.sort(key=lambda x: x["Stud_id"])
         # Find maximum and minimum Stud_id in the data entries
@@ -655,7 +667,6 @@ async def write_data_handler(request):
                 "status": "failure"
             }
             return web.json_response(response_json, status=400)
-
         # shard_data = {}
         data_idx = 0
         data_len = len(data_list)
@@ -663,14 +674,25 @@ async def write_data_handler(request):
         # To write the data entries to the shards all at once, using async functions
         tasks = []
         for shard in shard_range_list:
-            # low = shard[1]
+            low = shard[1]
             high = shard[2]
             shard_id = shard[0]
-            while data_idx < data_len and data_list[data_idx]["Stud_id"] < high:
-                data_idx += 1
+            shard_stud_id_low = shard[3]
+            while(True):
+                temp_id = data_list[data_idx]["Stud_id"]
+                if data_idx < data_len and temp_id >= low:
+                    if temp_id < high:
+                        data_idx += 1
+                    else:
+                        break
+                elif data_idx < data_len:
+                    data_idx += 1
+                    last_idx = data_idx
+                else:
+                    break
             
             # shard_data[shard_id] = data_list[last_idx:data_idx]
-            tasks.append(write_one_shard(shard_id, data_list[last_idx:data_idx]))
+            tasks.append(write_one_shard(shard_id, shard_stud_id_low, data_list[last_idx:data_idx]))
             last_idx = data_idx
         
         assert (data_idx == data_len)
@@ -695,7 +717,7 @@ async def write_data_handler(request):
     
     except Exception as e:
         response_json = {
-            "message": f"<Error> Invalid payload format: {e}",
+            "message": f"<Error> Invalid payload format: {e.__str__()}",
             "status": "failure"
         }
         return web.json_response(response_json, status=400)
@@ -728,7 +750,7 @@ async def update_data_handler(request):
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
-        shard_id, err = find_shard_id(stud_id)
+        shard_id, shard_stud_id_low, err = find_shard_id(stud_id)
         if shard_id=="":
             response_json = {
                 "message": f"<Error> {err}",
@@ -879,7 +901,7 @@ async def del_data_handler(request):
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
-        shard_id, err = find_shard_id(stud_id)
+        shard_id, shard_stud_id_low, err = find_shard_id(stud_id)
         if shard_id=="":
             response_json = {
                 "message": f"<Error> {err}",
@@ -985,7 +1007,7 @@ async def del_data_handler(request):
 
             # Update the valid_idx in the shardT, without acquiring writer lock
             shardT_lock.acquire_reader()
-            shardT[shard_id][2] -= 1
+            shardT[shard_stud_id_low][2] -= 1
             shardT_lock.release_reader()
 
             temp_lock.release_writer()
@@ -1081,7 +1103,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
     status, response = await communicate_with_server(db_server_hostname, "config", payload)
     if status!=200:
         response_json = {
-            "message": f"<Error> Failed to configure the db_server",
+            "message": f"<Error> Failed to configure the db_server, error: {response}",
             "status": "failure"
         }
         return False, response_json
@@ -1144,7 +1166,7 @@ async def init_handler(request):
     try:
         # Get a payload json from the request
         payload = await request.json()
-        print(payload, flush=True)
+        # print(payload, flush=True)
         # Get the number of servers to be added
         num_servers = int(payload['N'])
         # Get the StudT_schema
@@ -1188,8 +1210,9 @@ async def init_handler(request):
         del lb
         # New LoadBalancer object
         lb = LoadBalancer()
-        # Clear the shardT
+        # Clear the shardT and stud_id_low
         shardT = {}
+        stud_id_low = []
         # New shardT_lock
         shardT_lock = RWLock()
         # Clear the hb_threads
@@ -1452,7 +1475,7 @@ if __name__ == "__main__":
     shardT[200] = ["sh3", 100, 0]
     shardT[300] = ["sh4", 100, 0]
     shardT[400] = ["sh5", 100, 0]
-    shardT[500] = ["sh6", 78, 0]
+    shardT[500] = ["sh6", 79, 0]
     shardT[580] = ["sh7", 100, 0]
     shardT[700] = ["sh8", 100, 0]
     shardT[800] = ["sh9", 100, 0]
@@ -1461,7 +1484,7 @@ if __name__ == "__main__":
     shardT[1002] = ["sh12", 0, 0]
     
     
-    stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 578), (580, 680), (700, 800), (800, 900), (900, 1000), (1000, 1001), (1001, 1002)]
+    stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 579), (580, 680), (700, 800), (800, 900), (900, 1000), (1000, 1001), (1001, 1002)]
     
     # shard_id1, err = find_shard_id(51)
     # print(f"Shard ID for 51: {shard_id1}, {err}")
@@ -1477,12 +1500,12 @@ if __name__ == "__main__":
     # print(f"Shard ID for 1002: {shard_id6}, {err}")
 
     
-    low = 577
-    high= 679
+    low = 1003
+    high= 1005
     shards, err = find_shard_id_range(low, high)
     print(f"Shards for the range: {low}-{high}: {shards}, {err}")
 
-    shard, err = find_shard_id(low)
+    shard, _, err = find_shard_id(low)
     print(f"Shard for the value: {low}: {shard}, {err}")
     
     
