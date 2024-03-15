@@ -16,6 +16,7 @@ NUM_INITIAL_SERVERS = 3
 RANDOM_SEED = 4326
 SLEEP_BEFORE_FIRST_REQUEST = 2
 INT_MAX = 2**31 - 1  # 2147483647
+COMMIT_ROLLBACK_RETRY_CNT = 3
 
 lb : LoadBalancer = ""
 hb_threads: Dict[str, HeartBeat] = {}
@@ -47,23 +48,29 @@ def generate_random_req_id():
     return random.randint(10000, 99999)
 
 def find_shard_id(stud_id):
+    
+    '''
+    input: stud_id
+    output: shard_id, stud_id_low of shard_id, error_message
+    '''
+    
     global shardT
     global stud_id_low
     global shardT_lock
     
     err=""
     shardT_lock.acquire_reader()
-    idx = bisect.bisect_right(stud_id_low, (stud_id,INT_MAX)) - 1
+    idx = bisect.bisect_right(stud_id_low, (stud_id, INT_MAX))-1
     # if stud_id is less than the lowest stud_id, then it is invalid
     if (idx<0):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: Stud_id does not exist in the database"
-        return "", 0, err
-    # if stud_id is greater than the shard size, then it is invalid
+        return "", -1, err
+    # if stud_id is greater than or equal to the shard size, then it is invalid
     elif (stud_id >= stud_id_low[idx][1]):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: Stud_id does not exist in the database"
-        return "", 0, err
+        return "", -1, err
     
     # # if stud_id is greater than the highest valid index in the shard, then it is invalid
     # elif (stud_id > shardT[stud_id_low[idx]][2]):
@@ -76,8 +83,14 @@ def find_shard_id(stud_id):
         shardT_lock.release_reader()
         return shard_id, stud_id_low[idx][0], err
     
-# function to get the shards and the corresponding range of stud_ids for a given range of stud_ids
+# function to get the shards and the corresponding range of stud_ids for a given range (low, high) of stud_ids
 def find_shard_id_range(low, high):
+    
+    '''
+    input: low, high (range of stud_ids)
+    output: list of tuples (shard_id, lower_limit, upper_limit, lowest_stud_id_in_shard) and error_message
+    '''
+    
     global shardT   
     global stud_id_low
     global shardT_lock
@@ -89,50 +102,64 @@ def find_shard_id_range(low, high):
     limit_left = low
     limit_right = high + 1  # to include the high value in the range
     shardT_lock.acquire_reader() 
-    idx_left = bisect.bisect_right(stud_id_low, (low, INT_MAX)) - 1
+    idx_left = bisect.bisect_right(stud_id_low, (low, INT_MAX))-1
     
-    if (idx_left > len(stud_id_low)-1):
-        shardT_lock.release_reader()
-        return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
+    # if (idx_left > len(stud_id_low)-1):
+    #     shardT_lock.release_reader()
+    #     return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
+    # print(f"client_handler: idx_left: {idx_left}", flush=True)
     
     if (idx_left<0):
         idx_left = 0
-        limit_left = stud_id_low[idx_left][0]
+        # limit_left = stud_id_low[idx_left][0]
         
-    if (low >= stud_id_low[idx_left][1]):  # Will have >= instead of >, as the high of the previous shard is not included in the range of previous shard
+    if (low >= stud_id_low[idx_left][1]):
         idx_left += 1
-        if (idx_left >= len(stud_id_low)):
-            shardT_lock.release_reader()
-            return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
-        limit_left = stud_id_low[idx_left][0]
-    
-    idx_right = bisect.bisect_right(stud_id_low, (high, INT_MAX)) - 1
+        # limit_left = stud_id_low[idx_left][0
+ 
+    if (idx_left > len(stud_id_low)-1):
+        shardT_lock.release_reader()
+        return [], "Invalid range: The range of stud_ids does not exist in the database." 
+
+    # limit_left = stud_id_low[idx_left]
+    limit_left = max(low, stud_id_low[idx_left][0])
+
+
+    idx_right = bisect.bisect_right(stud_id_low, (high, INT_MAX))-1
     if (idx_right<0):
         shardT_lock.release_reader()
-        return [], "Invalid range: Both stud_id_low and stud_id_high are invalid"
+        return [], "Invalid range: The range of stud_ids does not exist in the database."
     
     if (high >= stud_id_low[idx_right][1]):
         limit_right = stud_id_low[idx_right][1]
-    
-    # Necessary check
-    if (idx_left > idx_right or limit_left >= limit_right):
-        shardT_lock.release_reader()
-        return [], "Given range is not in the database"
+        
     shards = []
+    print(f"client_handler: idx_left: {idx_left}, idx_right: {idx_right}", flush=True)
     
     if (idx_left == idx_right): # if the range lies within a single shard
-        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right, stud_id_low[idx_left][0]))
+        # if (shardT[stud_id_low[idx_left]][1] > 0):
+        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right. stud_id_low[idx_left][0]))
         shardT_lock.release_reader()
+        if len(shards) == 0:
+            err= "Invalid range: The range of stud_ids does not exist in the database."
         return shards, err
-    else:
+    
+    elif (idx_left < idx_right):
         shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, stud_id_low[idx_left][1], stud_id_low[idx_left][0]))
+        
         for i in range(idx_left+1, idx_right):
             shards.append((shardT[stud_id_low[i][0]][0], stud_id_low[i][0], stud_id_low[i][1], stud_id_low[i][0]))
+
         shards.append((shardT[stud_id_low[idx_right][0]][0], stud_id_low[idx_right][0], limit_right, stud_id_low[idx_right][0]))
         shardT_lock.release_reader()
+        if len(shards) == 0:
+            err= "Invalid range: The range of stud_ids does not exist in the database."
         return shards, err
-        
     
+    else:
+        shardT_lock.release_reader()
+        return [], "Invalid range: The range of stud_ids does not exist in the database."
+
 
 async def communicate_with_server(server, endpoint, payload={}):
     try:
@@ -454,6 +481,7 @@ async def read_data_handler(request):
     try:
         request_json = await request.json()
         
+        # Check if the payload has the required fields
         if 'Stud_id' not in request_json:
             response_json = {
                 "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
@@ -471,6 +499,7 @@ async def read_data_handler(request):
             }
             return web.json_response(response_json, status=400)
         
+        # Find the shards to be queried for the given range of Stud_ids
         shard_range_list, err = find_shard_id_range(stud_id_obj["low"], stud_id_obj["high"])
         if len(shard_range_list)==0:
             response_json = {
@@ -481,6 +510,7 @@ async def read_data_handler(request):
         
         data_read = []
         shards_read = []
+        # Read the data entries from the shards one by one
         for entry in shard_range_list:
             shard_id=entry[0]
             low=entry[1]
@@ -488,7 +518,7 @@ async def read_data_handler(request):
             
             req_id = generate_random_req_id()
             # NO NEED TO ACQUIRE READ LOCK  OF SHARD CONSISTENT HASH HERE, AS THE LOCK IS ALREADY ACQUIRED BY THE 'ASSIGN_SERVER' FUNCTION 
-            server =lb.assign_server(shard_id, req_id)
+            server =lb.assign_server(shard_id, req_id) # select a server among those which have a replica of the shard (based on the consistent hashing)
             
             server_json = {
                 "shard": shard_id,
@@ -577,7 +607,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
         print(f"client_handler: Error: {error_msg}", flush=True)
         # rollback the write operation on the servers
         for server in servers_updated:
-            retry_cntr = 3
+            retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
             while retry_cntr > 0:
                 status, response = await communicate_with_server(server, "rollback")
                 if status==200:
@@ -612,7 +642,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
     else:
         assert (servers_updated == servers)
         for server in servers_updated:
-            retry_cntr = 3
+            retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
             while retry_cntr > 0:
                 status, response = await communicate_with_server(server, "commit")
                 if status==200:
@@ -747,6 +777,7 @@ async def update_data_handler(request):
     try:
         request_json = await request.json()
         
+        # Check if the payload has the required fields
         if 'Stud_id' not in request_json:
             response_json = {
                 "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
@@ -762,7 +793,10 @@ async def update_data_handler(request):
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
-        shard_id, shard_stud_id_low, err = find_shard_id(stud_id)
+        # Find the shard to be updated for the given Stud_id
+        shard_id, shard_stud_id_low, err = find_shard_id(stud_id) 
+        
+        # Handle errors in finding the shard_id
         if shard_id=="":
             response_json = {
                 "message": f"<Error> {err}",
@@ -795,30 +829,31 @@ async def update_data_handler(request):
         rollback = False
         
         temp_lock.acquire_writer()
+        # update the entry one by one on all the servers which have a replica of the shard
         for server in servers:
             # update the entry on the servers one by one
             status, response = await communicate_with_server(server, "update", server_json)
             if status==200:
                 servers_updated.append(server)
-            else:
+            else: # if the update request failed on a server
                 if status!=500:
                     error_msg = response.get("message", "Unknown Error")
                     error_flag = True
-                rollback = True
+                rollback = True # set the rollback flag to True to rollback the update operation on all the servers
                 break
 
         
         if rollback:
             # rollback the update operation on the servers
             for server in servers_updated:
-                retry_cntr = 3
+                retry_cntr = COMMIT_ROLLBACK_RETRY_CNT # retry counter for commit/rollback operations on the servers
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "rollback")
                     if status==200:
                         break
                     retry_cntr -= 1
                 
-                if retry_cntr == 0:
+                if retry_cntr == 0: # if the rollback operation failed on a server
                     temp_lock.release_writer()
                     print(f"client_handler: Rollback failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
@@ -844,19 +879,19 @@ async def update_data_handler(request):
             else:   
                 return web.json_response(default_response_json, status=500)
             
-        # commit the update operation on all the servers
+        # commit the update operation on all the servers if the update was successful on all the servers
         else:
             
-            assert (servers_updated == servers) # as all servers should be updated
+            assert (servers_updated == servers) # as all servers should have been updated
             for server in servers_updated:
-                retry_cntr = 3
+                retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "commit")
                     if status==200:
                         break
                     retry_cntr -= 1
                 
-                if retry_cntr == 0:
+                if retry_cntr == 0: # if the commit operation failed on a server
                     temp_lock.release_writer()
                     print(f"client_handler: Commit failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
@@ -905,6 +940,7 @@ async def del_data_handler(request):
     try:
         request_json = await request.json()
         
+        # Check if the payload has the required fields
         if 'Stud_id' not in request_json:
             response_json = {
                 "message": f"<Error> Invalid payload format: 'Stud_id' field missing in request",
@@ -913,6 +949,7 @@ async def del_data_handler(request):
             return web.json_response(response_json, status=400)
         
         stud_id=request_json.get("Stud_id")
+        # Find the shard from which the entry is to be deleted for the given Stud_id
         shard_id, shard_stud_id_low, err = find_shard_id(stud_id)
         if shard_id=="":
             response_json = {
@@ -950,24 +987,24 @@ async def del_data_handler(request):
             if status==200:
                 servers_updated.append(server)
             else:
-                if status!=500:
+                if status!=500: # if the delete request failed on a server, set the error flag and rollback flag
                     error_msg = response.get("message", "Unknown Error")
                     error_flag = True
-                rollback = True
+                rollback = True # set the rollback flag to True to rollback the delete operation on all the servers
                 break
           
         
         if rollback:
             # rollback the delete operation on the servers
             for server in servers_updated:
-                retry_cntr = 3
+                retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "rollback")
                     if status==200:
                         break
                     retry_cntr -= 1
                 
-                if retry_cntr == 0:
+                if retry_cntr == 0: # if the rollback operation failed on a server
                     temp_lock.release_writer()
                     print(f"client_handler: Rollback failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)
@@ -992,19 +1029,19 @@ async def del_data_handler(request):
                 return web.json_response(default_response_json, status=500)  
       
       
-        # commit the delete operation on all the servers  
+        # commit the delete operation on all the servers if the delete was successful on all the servers
         else:
  
             assert (servers_updated == servers) # as all servers should be updated
             for server in servers_updated:
-                retry_cntr = 3
+                retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
                     status, response = await communicate_with_server(server, "commit")
                     if status==200:
                         break
                     retry_cntr -= 1 
 
-                if retry_cntr == 0:
+                if retry_cntr == 0: # if the commit operation failed on a server
                     temp_lock.release_writer()
                     print(f"client_handler: Commit failed on server: {server}", flush=True)
                     print(f"client_handler: Data inconsistency: The requested update created an inconsistency in the database", flush=True)                   
