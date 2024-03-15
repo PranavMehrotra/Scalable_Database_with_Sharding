@@ -201,3 +201,23 @@ class Manager:
         
         except Exception as e:
             return e, 500
+        
+    def Clear_table(self,request_json):
+        try:
+            if not self.sql_handler.connected:
+                message, status = self.sql_handler.connect()
+                if status != 200:
+                    return message, status
+
+            if 'table' not in request_json:
+                return "'table' field missing in request", 400
+        
+            tablename = request_json.get("table")
+            message, status = self.sql_handler.Clear_table(tablename)
+            if status != 200:
+                return message, status
+            
+            return "Table cleared", 200
+        
+        except Exception as e:
+            return e, 500

@@ -183,6 +183,33 @@ async def delete_table(request):
         print(f"DB_Server: Error in delete endpoint: {str(e)}")
         return web.json_response({"error": "Internal Server Error"}, status=500)
 
+async def clear_table(request):
+    try:
+        print("Delete endpoint called")
+        # Get the JSON data from the request
+        request_json = await request.json()  
+        message, status = mgr.Clear_table(request_json)
+    
+        response_data = {}
+        # Create a response JSON
+        if status == 200:
+            response_data = {
+                "message": message,
+                "status": "success"
+            }
+        
+        else:
+            response_data = {
+                "message": f"{str(message)}",
+                "status": "failure"
+            }
+        return web.json_response(response_data, status=status)        
+        
+    except Exception as e:
+        
+        print(f"DB_Server: Error in delete endpoint: {str(e)}")
+        return web.json_response({"error": "Internal Server Error"}, status=500)
+
 async def not_found(request):
     return web.Response(text="Not Found", status=400)
 
@@ -200,6 +227,7 @@ def run_server():
     app.router.add_put('/update', update_database)
     app.router.add_delete('/del', delete_entries)
     app.router.add_delete('/del_table', delete_table)
+    app.router.add_post('/clear_table', clear_table)
 
 
     # Add a catch-all route for any other endpoint, which returns a 400 Bad Request

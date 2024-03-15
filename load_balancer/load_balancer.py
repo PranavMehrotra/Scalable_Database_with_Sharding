@@ -270,6 +270,17 @@ class LoadBalancer:
         servers_list = self.consistent_hashing[shard_id].list_servers()
         self.rw_lock.release_reader()
         return servers_list
+    
+    def list_shards(self, list_servers: bool = False):
+        if not list_servers:
+            self.rw_lock.acquire_reader()
+            shards_list = list(self.consistent_hashing.keys())
+            self.rw_lock.release_reader()
+            return shards_list
+        self.rw_lock.acquire_reader()
+        shard_to_servers = {shard: val.list_servers() for shard, val in self.consistent_hashing.items()}
+        self.rw_lock.release_reader()
+        return shard_to_servers
 
     def increment_server_req_count(self, server):
         self.load_cnt_lock.acquire_writer()

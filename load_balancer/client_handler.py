@@ -3,6 +3,7 @@ from aiohttp import web
 import random
 from load_balancer import LoadBalancer
 from heartbeat import HeartBeat
+from db_checkpointer import Checkpointer
 from docker_utils import *
 import aiohttp
 import requests
@@ -18,6 +19,8 @@ INT_MAX = 2**31 - 1  # 2147483647
 
 lb : LoadBalancer = ""
 hb_threads: Dict[str, HeartBeat] = {}
+
+checkpointer_thread: Checkpointer = ""
 
 shardT_lock = RWLock()
 
@@ -298,6 +301,8 @@ async def add_server_handler(request):
             # Insert the (Stud_id_low, Stud_id_low + Shard_size) tuple in the stud_id_low list, maintaining the sorted order
             bisect.insort(stud_id_low, (shard[0], shard[0]+shard[2]))
         shardT_lock.release_writer()
+        # Set checkpoint event
+        checkpointer_thread.write_ShardT()
         print(f"client_handler: Added {len(new_shards)} shards to the system")
         print(f"client_handler: ShardT: {shardT}")
     # Add the servers to the system
@@ -309,6 +314,9 @@ async def add_server_handler(request):
             "status": "failure"
         }
         return web.json_response(response_json, status=400)
+    
+    # Set checkpoint event
+    checkpointer_thread.write_MapT()
 
     print(f"client_handler: Added {num_added} servers to the system")
     print(f"client_handler: Added Servers: {added_servers}", flush=True)
@@ -390,6 +398,9 @@ async def remove_server_handler(request):
         }
         return web.json_response(response_json, status=400)
     
+    # Set checkpoint event
+    checkpointer_thread.write_MapT()
+    
     print(f"client_handler: Removed {num_removed} servers from the system")
     print(f"client_handler: Removed Servers: {removed_servers}", flush=True)
     if err!="":
@@ -429,7 +440,6 @@ async def rep_handler(request):
     }
     return web.json_response(response_json, status=200)
 
-## Nyati's changes here: 
 
 # function to read a range of data entries from the database
 async def read_data_handler(request):
@@ -513,6 +523,8 @@ async def read_data_handler(request):
 # function to write data entries of one shard replica in multiple servers, to be called by the write_data_handler
 async def write_one_shard(shard_id, shard_stud_id_low, data):
     global lb
+    global shardT
+    global shardT_lock
     print(f"client_handler: Write request for shard: {shard_id}, data: {data}", flush=True)
     temp_lock=lb.consistent_hashing[shard_id].lock
     temp_lock.acquire_reader()
@@ -1050,35 +1062,6 @@ def heartbeat_db_server():
     except:
         return False
 
-# Function to send POST request to the server /config endpoint to initialize the database
-# async def config_server(server, payload):
-#     try:
-#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-#             async with session.post(f'http://{server}:{SERVER_PORT}/config', json=payload) as response:
-#                 response_status = response.status
-#                 if response_status == 200:
-#                     return True
-#                 else:
-#                     print(f"client_handler: Failed to configure server {server}\nResponse: {await response.json()}", flush=True)
-#                     return False
-#     except:
-#         return False
-
-# Function to write values to the /write endpoint of server
-## IMPORTANT: Only to be used for writing to the db_server
-# async def write_server(server, payload):
-#     try:
-#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
-#             async with session.post(f'http://{server}:{SERVER_PORT}/write', json=payload) as response:
-#                 response_status = response.status
-#                 if response_status == 200:
-#                     return True
-#                 else:
-#                     print(f"client_handler: Failed to write to server {server}\nResponse: {await response.json()}", flush=True)
-#                     return False
-#     except:
-#         return False
-    
 
 
 async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
@@ -1155,6 +1138,7 @@ async def init_handler(request):
     global shardT_lock
     global StudT_schema
     global stud_id_low
+    global checkpointer_thread
     global init_done
     # Check init_done flag
     if init_done:
@@ -1199,13 +1183,14 @@ async def init_handler(request):
             del hb_threads[server]
             # close the docker containers and corresponding threads for the servers that were finally removed
             kill_server_cntnr(server)
-
+        # Stop checkpointer thread
+        checkpointer_thread.stop()
+        del checkpointer_thread
         # Kill the db_server container
         kill_db_server_cntnr(db_server_hostname)
 
         # Acquire the writer lock for the old shardT
-        tem_lock = shardT_lock
-        tem_lock.acquire_writer()
+        shardT_lock.acquire_writer()
         # Delete the LoadBalancer object
         del lb
         # New LoadBalancer object
@@ -1213,12 +1198,9 @@ async def init_handler(request):
         # Clear the shardT and stud_id_low
         shardT = {}
         stud_id_low = []
-        # New shardT_lock
-        shardT_lock = RWLock()
         # Clear the hb_threads
         hb_threads = {}
-        tem_lock.release_writer() # Release the writer lock for the old shardT
-        del tem_lock
+        shardT_lock.release_writer()
 
     new_shards = []
     # Add the shards to the system
@@ -1281,6 +1263,10 @@ async def init_handler(request):
     success, response_json = await spawn_and_config_db_server(serv_to_shard)
     if not success:
         return web.json_response(response_json, status=400)
+
+    # Start the checkpointer thread
+    checkpointer_thread = Checkpointer(lb, shardT, shardT_lock, db_server_hostname)
+    checkpointer_thread.start()
 
     payload = {
         "schema": studt_schema,
@@ -1412,6 +1398,10 @@ def interrupt_handler(signum, frame):
 def run_load_balancer():
     global lb
     global hb_threads
+    global shardT
+    global shardT_lock
+    global db_server_hostname
+    global checkpointer_thread
     random.seed(RANDOM_SEED)
     signal.signal(signal.SIGINT, interrupt_handler)
     signal.signal(signal.SIGTERM, interrupt_handler)
@@ -1431,6 +1421,11 @@ def run_load_balancer():
         print(f"client_handler: Recovered from db_server successfully", flush=True)
     else:
         print(f"client_handler: DB server not running, starting fresh", flush=True)
+
+    # Spawn Checkpointer thread
+    checkpointer_thread = Checkpointer(lb, shardT, shardT_lock, db_server_hostname)
+    checkpointer_thread.start()
+
     app = web.Application()
     # app.router.add_get('/home', home)
     app.router.add_post('/add', add_server_handler)

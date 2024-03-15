@@ -160,3 +160,12 @@ class SQLHandler:
             return f"Successfully dropped {table_name}", 200
         except Exception as e:
             return e, 500
+        
+    def Clear_table(self,table_name):
+        try:
+            res,status = self.query(f"DELETE FROM {table_name};")
+            if status != 200:
+                return res, status
+            return f"Successfully cleared {table_name}", 200
+        except Exception as e:
+            return e, 500
