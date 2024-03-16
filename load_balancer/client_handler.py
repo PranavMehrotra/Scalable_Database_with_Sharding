@@ -571,24 +571,20 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
     error_msg = ""
     error_flag = False
     rollback = False
+    temp_lock.acquire_writer()
+    shardT_lock.acquire_reader()
     try:
-        temp_lock.acquire_writer()
-        shardT_lock.acquire_reader()
         valid_idx = shardT[shard_stud_id_low][2]
+    except KeyError:
         shardT_lock.release_reader()
-        payload = {
-            "shard": shard_id,
-            "curr_idx": valid_idx,
-            "data": data
-        }
-    # Check KeyErrors and other exceptions
-    except Exception as e:
         temp_lock.release_writer()
-        response_json = {
-            "message": f"<Error> {e}",
-            "status": "failure"
-        }
-        return 400, response_json
+        return 500, {"message": f"Internal Server Error: The requested data could not be written"}
+    shardT_lock.release_reader()
+    payload = {
+        "shard": shard_id,
+        "curr_idx": valid_idx,
+        "data": data
+    }
     print(f"client_handler: Writing data to shard: {shard_id}, data: {data}", flush=True)
     for server in servers:
         # write the entry on the servers one by one
@@ -663,7 +659,12 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
                 return 500, response_json
         # Update the valid_idx in the shardT
         shardT_lock.acquire_reader()
-        shardT[shard_stud_id_low][2] = valid_idx + len(data)
+        try:
+            shardT[shard_stud_id_low][2] = valid_idx + len(data)
+        except KeyError:
+            shardT_lock.release_reader()
+            temp_lock.release_writer()
+            return 500, {"message": f"Internal Server Error: The requested data could not be written"}
         shardT_lock.release_reader()
         temp_lock.release_writer()
         return 200, {"message": "success"}
