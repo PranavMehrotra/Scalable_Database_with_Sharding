@@ -49,6 +49,7 @@ class Checkpointer(threading.Thread):
     
     def checkpoint(self):
         print("checkpointer: Checkpointing shardT", flush=True)
+        success = True
         if not self.should_write_ShardT():
             # Construct a payload for the shardT checkpoint, then send PUT to /update endpoint
             payload = {
@@ -72,7 +73,8 @@ class Checkpointer(threading.Thread):
             # Send the PUT request to the db server
             response = requests.put(f'http://{self._db_server_name}:{self._db_server_port}/update', json=payload)
             if response.status_code != 200:
-                print(f"checkpointer: Error in updating shardT", flush=True)
+                print(f"checkpointer: Error in updating shardT, message: {response.text}", flush=True)
+                success = False
         
         else:
             # reset the write_ShardT event
@@ -97,6 +99,7 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/write', json=payload)
             if response.status_code != 200:
                 print(f"checkpointer: Error in updating ShardT", flush=True)
+                success = False
 
         if self.should_write_MapT():
             # reset the write_MapT event
@@ -106,6 +109,7 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "MapT"})
             if response.status_code != 200:
                 print(f"checkpointer: Error in clearing MapT", flush=True)
+                return
             # Construct a payload for the MapT checkpoint, then send POST to /write endpoint
             payload = {
                 "table": "MapT",
@@ -119,7 +123,12 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/write', json=payload)
             if response.status_code != 200:
                 print(f"checkpointer: Error in updating MapT", flush=True)
-        print("checkpointer: Checkpointing done!", flush=True)
+                success = False
+        
+        if success:
+            print("checkpointer: Checkpointing done!", flush=True)
+        else:
+            print("checkpointer: Error in checkpointing!", flush=True)
 
     def run(self):
         print(f"checkpointer: Checkpointer thread started for server: {self._db_server_name}", flush=True)

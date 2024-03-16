@@ -767,15 +767,15 @@ async def write_data_handler(request):
             shard_stud_id_low = shard[3]
             while(True):
                 temp_id = data_list[data_idx]["Stud_id"]
-                if data_idx < data_len and temp_id >= low:
+                if temp_id >= low:
                     if temp_id < high:
                         data_idx += 1
                     else:
                         break
-                elif data_idx < data_len:
+                else:
                     data_idx += 1
                     last_idx = data_idx
-                else:
+                if data_idx >= data_len:
                     break
             
             # shard_data[shard_id] = data_list[last_idx:data_idx]
@@ -1284,6 +1284,10 @@ async def init_handler(request):
         hb_threads = {}
         shardT_lock.release_writer()
 
+        # Start a new checkpointer thread
+        checkpointer_thread = Checkpointer(lb, shardT, shardT_lock, db_server_hostname)
+        checkpointer_thread.start()
+
     new_shards = []
     # Add the shards to the system
     if len(shards) > 0:
@@ -1346,9 +1350,6 @@ async def init_handler(request):
     if not success:
         return web.json_response(response_json, status=400)
 
-    # Start the checkpointer thread
-    checkpointer_thread = Checkpointer(lb, shardT, shardT_lock, db_server_hostname)
-    checkpointer_thread.start()
 
     payload = {
         "schema": studt_schema,
