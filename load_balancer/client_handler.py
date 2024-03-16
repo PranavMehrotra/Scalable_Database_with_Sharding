@@ -138,7 +138,7 @@ def find_shard_id_range(low, high):
     
     if (idx_left == idx_right): # if the range lies within a single shard
         # if (shardT[stud_id_low[idx_left]][1] > 0):
-        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right. stud_id_low[idx_left][0]))
+        shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right, stud_id_low[idx_left][0]))
         shardT_lock.release_reader()
         if len(shards) == 0:
             err= "Invalid range: The range of stud_ids does not exist in the database."
@@ -510,30 +510,76 @@ async def read_data_handler(request):
         
         data_read = []
         shards_read = []
-        # Read the data entries from the shards one by one
-        for entry in shard_range_list:
-            shard_id=entry[0]
-            low=entry[1]
-            high=entry[2]
+        
+        # SEQUENTIAL READ REQUESTS TO ALL SHARDS 
+        
+        # # Read the data entries from the shards one by one
+        # for entry in shard_range_list:
+        #     shard_id=entry[0]
+        #     low=entry[1]
+        #     high=entry[2]
             
+        #     req_id = generate_random_req_id()
+        #     # NO NEED TO ACQUIRE READ LOCK  OF SHARD CONSISTENT HASH HERE, AS THE LOCK IS ALREADY ACQUIRED BY THE 'ASSIGN_SERVER' FUNCTION 
+        #     server =lb.assign_server(shard_id, req_id) # select a server among those which have a replica of the shard (based on the consistent hashing)
+            
+        #     server_json = {
+        #         "shard": shard_id,
+        #         "Stud_id": {"low": low, "high": high}
+        #     }
+            
+        #     status, response = await communicate_with_server(server, "read", server_json)
+        #     if status==200:
+        #         data_read.append(response.get("data", []))
+        #         shards_read.append(shard_id)
+        #     else:
+        #         data_read = []
+        #         shards_read = []
+        #         return web.json_response(default_response_json, status=500)
+            
+        # response_json = {
+        #     "shards_queried": shards_read,
+        #     "data": data_read,
+        #     "status": "success"
+        # }
+        # return web.json_response(response_json, status=200)
+    
+        # PARALLEL READ REQUESTS TO ALL SHARDS USING ASYNCIO.GATHER
+        tasks = []
+        for shard in shard_range_list:
+            shard_id = shard[0]
+            low = shard[1]
+            high = shard[2]
+        
             req_id = generate_random_req_id()
             # NO NEED TO ACQUIRE READ LOCK  OF SHARD CONSISTENT HASH HERE, AS THE LOCK IS ALREADY ACQUIRED BY THE 'ASSIGN_SERVER' FUNCTION 
             server =lb.assign_server(shard_id, req_id) # select a server among those which have a replica of the shard (based on the consistent hashing)
-            
+ 
             server_json = {
                 "shard": shard_id,
                 "Stud_id": {"low": low, "high": high}
-            }
+            }           
+            # append the read request to the list of tasks
+            tasks.append(communicate_with_server(server, "read", server_json))
             
-            status, response = await communicate_with_server(server, "read", server_json)
-            if status==200:
-                data_read.append(response.get("data", []))
-                shards_read.append(shard_id)
+        # Wait for all the reads to complete and get the results
+        results = await asyncio.gather(*tasks)
+        
+        success_flag = True
+        for status, response, shard_id in zip(results, shard_range_list):
+        # for status, response in results:
+            if status!=200:
+                print(f"client_handler: <Error> Failed to read data from shard: {shard_id[0]}, message: {response.get('message', 'Internal Server Error')}", flush=True)
+                # print(f"client_handler: <Error> Failed to read data, message: {response.get('message', 'Internal Server Error')}", flush=True)
+                success_flag = False
             else:
-                data_read = []
-                shards_read = []
-                return web.json_response(default_response_json, status=500)
-            
+                data_read.append(response.get("data", []))
+                shards_read.append(shard_id[0])
+                
+        if not success_flag:
+            return web.json_response(default_response_json, status=500)
+        
+        print(f"client_handler: Data read from shards: {shards_read}", flush=True)
         response_json = {
             "shards_queried": shards_read,
             "data": data_read,
@@ -548,7 +594,6 @@ async def read_data_handler(request):
         }
         return web.json_response(response_json, status=400)
                 
-
 
 # function to write data entries of one shard replica in multiple servers, to be called by the write_data_handler
 async def write_one_shard(shard_id, shard_stud_id_low, data):
@@ -745,7 +790,7 @@ async def write_data_handler(request):
         success_flag = True
         for status, response in results:
             if status!=200:
-                print(f"client_handler: <Error> Failed to write to shard: {shard_id}, messsage: {response.get('message', 'Internal Server Error')}", flush=True)
+                print(f"client_handler: <Error> Failed to write, messsage: {response.get('message', 'Internal Server Error')}", flush=True)
                 success_flag = False
     
         if not success_flag:
@@ -1272,7 +1317,7 @@ async def init_handler(request):
         stud_id_low.sort()
         shardT_lock.release_writer()
         print(f"client_handler: Added {len(new_shards)} shards to the system")
-        print(f"client_handler: ShardT: {shardT}")
+        print(f"client_handler: ShardT: {shardT}", flush=True)
     # Add the servers to the system
     num_added, added_servers, err = lb.add_servers(num_servers, serv_to_shard)
     if err!="":
@@ -1516,7 +1561,7 @@ if __name__ == "__main__":
     shardT[1002] = ["sh12", 0, 0]
     
     
-    stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 579), (580, 680), (700, 800), (800, 900), (900, 1000), (1000, 1001), (1001, 1002)]
+    stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 579), (580, 680), (700, 800), (800, 900), (900, 1000), (1001, 1002), (1002, 1002)]
     
     # shard_id1, err = find_shard_id(51)
     # print(f"Shard ID for 51: {shard_id1}, {err}")
@@ -1532,8 +1577,8 @@ if __name__ == "__main__":
     # print(f"Shard ID for 1002: {shard_id6}, {err}")
 
     
-    low = 1003
-    high= 1005
+    low = 593
+    high= 632
     shards, err = find_shard_id_range(low, high)
     print(f"Shards for the range: {low}-{high}: {shards}, {err}")
 

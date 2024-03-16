@@ -52,7 +52,7 @@ class Checkpointer(threading.Thread):
         if not self.should_write_ShardT():
             # Construct a payload for the shardT checkpoint, then send PUT to /update endpoint
             payload = {
-                "table": "shardT",
+                "table": "ShardT",
                 "column": self._key_column,
                 "keys": [],
                 "update_column": self._update_column,
@@ -60,6 +60,10 @@ class Checkpointer(threading.Thread):
             }
             # Acquire a read lock on the shardT
             self._shardT_lock.acquire_reader()
+            if len(self._shardT) == 0:
+                # Release the read lock on the shardT
+                self._shardT_lock.release_reader()
+                return
             tem_keys, tem_vals = zip(*[(key, val[2]) for key, val in self._shardT.items()])
             # Release the read lock on the shardT
             self._shardT_lock.release_reader()
@@ -75,12 +79,12 @@ class Checkpointer(threading.Thread):
             self._write_ShardT.clear()
             print("checkpointer: Checkpointing ShardT by overwriting new ShardT", flush=True)
             # First Clear the ShardT table, by sending a POST request to /clear_table endpoint  
-            response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "shardT"})
+            response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "ShardT"})
             if response.status_code != 200:
                 print(f"checkpointer: Error in clearing ShardT", flush=True)
             # Construct a payload for the ShardT checkpoint, then send POST to /write endpoint
             payload = {
-                "table": "shardT",
+                "table": "ShardT",
                 "data": []
             }
             # Acquire a read lock on the shardT

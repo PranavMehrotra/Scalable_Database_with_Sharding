@@ -1,6 +1,5 @@
 FROM python:latest
 
-
 RUN apt-get update
 RUN apt-get install -y python3
 RUN apt-get install -y python3-pip
@@ -10,7 +9,7 @@ RUN apt-get install -y python3-pip
 RUN apt-get -y install sudo
 
 # RUN apt-get update
-RUN apt-get install ca-certificates curl gnupg
+RUN apt-get install ca-certificates curl gnupg -y
 RUN install -m 0755 -d /etc/apt/keyrings
 RUN curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 RUN chmod a+r /etc/apt/keyrings/docker.gpg
