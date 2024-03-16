@@ -49,10 +49,11 @@ class Checkpointer(threading.Thread):
     
     def checkpoint(self):
         print("checkpointer: Checkpointing shardT", flush=True)
+        success = True
         if not self.should_write_ShardT():
             # Construct a payload for the shardT checkpoint, then send PUT to /update endpoint
             payload = {
-                "table": "shardT",
+                "table": "ShardT",
                 "column": self._key_column,
                 "keys": [],
                 "update_column": self._update_column,
@@ -60,6 +61,10 @@ class Checkpointer(threading.Thread):
             }
             # Acquire a read lock on the shardT
             self._shardT_lock.acquire_reader()
+            if len(self._shardT) == 0:
+                # Release the read lock on the shardT
+                self._shardT_lock.release_reader()
+                return
             tem_keys, tem_vals = zip(*[(key, val[2]) for key, val in self._shardT.items()])
             # Release the read lock on the shardT
             self._shardT_lock.release_reader()
@@ -68,19 +73,20 @@ class Checkpointer(threading.Thread):
             # Send the PUT request to the db server
             response = requests.put(f'http://{self._db_server_name}:{self._db_server_port}/update', json=payload)
             if response.status_code != 200:
-                print(f"checkpointer: Error in updating shardT", flush=True)
+                print(f"checkpointer: Error in updating shardT, message: {response.text}", flush=True)
+                success = False
         
         else:
             # reset the write_ShardT event
             self._write_ShardT.clear()
             print("checkpointer: Checkpointing ShardT by overwriting new ShardT", flush=True)
             # First Clear the ShardT table, by sending a POST request to /clear_table endpoint  
-            response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "shardT"})
+            response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "ShardT"})
             if response.status_code != 200:
                 print(f"checkpointer: Error in clearing ShardT", flush=True)
             # Construct a payload for the ShardT checkpoint, then send POST to /write endpoint
             payload = {
-                "table": "shardT",
+                "table": "ShardT",
                 "data": []
             }
             # Acquire a read lock on the shardT
@@ -93,6 +99,7 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/write', json=payload)
             if response.status_code != 200:
                 print(f"checkpointer: Error in updating ShardT", flush=True)
+                success = False
 
         if self.should_write_MapT():
             # reset the write_MapT event
@@ -102,6 +109,7 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/clear_table', json={"table": "MapT"})
             if response.status_code != 200:
                 print(f"checkpointer: Error in clearing MapT", flush=True)
+                return
             # Construct a payload for the MapT checkpoint, then send POST to /write endpoint
             payload = {
                 "table": "MapT",
@@ -115,7 +123,12 @@ class Checkpointer(threading.Thread):
             response = requests.post(f'http://{self._db_server_name}:{self._db_server_port}/write', json=payload)
             if response.status_code != 200:
                 print(f"checkpointer: Error in updating MapT", flush=True)
-        print("checkpointer: Checkpointing done!", flush=True)
+                success = False
+        
+        if success:
+            print("checkpointer: Checkpointing done!", flush=True)
+        else:
+            print("checkpointer: Error in checkpointing!", flush=True)
 
     def run(self):
         print(f"checkpointer: Checkpointer thread started for server: {self._db_server_name}", flush=True)

@@ -271,7 +271,7 @@ class Manager:
                 if status != 200:
                     return message, status
 
-            message, status = self.sql_handler.mydb.commit()
+            self.sql_handler.mydb.commit()
             return "Changes committed", 200
 
         except Exception as e:
@@ -284,7 +284,7 @@ class Manager:
                 if status != 200:
                     return message, status
 
-            message, status = self.sql_handler.mydb.rollback()
+            self.sql_handler.mydb.rollback()
             return "Changes rolled back", 200
 
         except Exception as e:
