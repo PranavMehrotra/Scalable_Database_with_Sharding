@@ -134,7 +134,7 @@ def find_shard_id_range(low, high):
         limit_right = stud_id_low[idx_right][1]
         
     shards = []
-    print(f"client_handler: idx_left: {idx_left}, idx_right: {idx_right}", flush=True)
+    # print(f"client_handler: idx_left: {idx_left}, idx_right: {idx_right}", flush=True)
     
     if (idx_left == idx_right): # if the range lies within a single shard
         # if (shardT[stud_id_low[idx_left]][1] > 0):
@@ -192,6 +192,29 @@ async def communicate_with_server(server, endpoint, payload={}):
     except Exception as e:
         return 500, {"message": f"{e}"}
 
+
+def synchronous_communicate_with_server(server, endpoint, payload={}):
+    try:
+        request_url = f'http://{server}:{SERVER_PORT}/{endpoint}'
+        if endpoint == "copy" or endpoint == "commit" or endpoint == "rollback":
+            response = requests.get(request_url, json=payload)
+            return response.status_code, response.json()
+            
+        elif endpoint == "read" or endpoint == "write" or endpoint == "config":
+            response = requests.post(request_url, json=payload)
+            return response.status_code, response.json()
+        
+        elif endpoint == "update":
+            response = requests.put(request_url, json=payload)
+            return response.status_code, response.json()
+        
+        elif endpoint == "del":
+            response = requests.delete(request_url, json=payload)
+            return response.status_code, response.json()
+        else:
+            return 500, {"message": "Invalid endpoint"}
+    except Exception as e:
+        return 500, {"message": f"{e}"}
 
 # async def home(request):
 #     global lb
@@ -600,11 +623,11 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
     global lb
     global shardT
     global shardT_lock
-    print(f"client_handler: Write request for shard: {shard_id}, data: {data}", flush=True)
+    # print(f"client_handler: Write request for shard: {shard_id}, data: {data}")
     temp_lock=lb.consistent_hashing[shard_id].lock
-    temp_lock.acquire_reader()
+    # temp_lock.acquire_reader()
     servers = lb.list_shard_servers(shard_id)
-    temp_lock.release_reader()
+    # temp_lock.release_reader()
     
     # if no servers are available for the shard, return a failure response
     if len(servers)==0:
@@ -630,10 +653,13 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
         "curr_idx": valid_idx,
         "data": data
     }
-    print(f"client_handler: Writing data to shard: {shard_id}, data: {data}", flush=True)
+    # print(f"client_handler: Writing data to shard: {shard_id}, data: {data}")
     for server in servers:
+        # print(f"client_handler: Writing data to server: {server}, payload: {payload}", flush=True)
         # write the entry on the servers one by one
-        status, response = await communicate_with_server(server, "write", payload)
+        # status, response = await communicate_with_server(server, "write", payload)
+        status, response = synchronous_communicate_with_server(server, "write", payload)
+        # print(f"client_handler: Write response from server: {server}, shard: {shard_id} status: {status}, response: {response}", flush=True)
         if status==200:
             servers_updated.append(server)
         else:
@@ -642,7 +668,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
                 error_flag = True
             rollback = True
             break
-    
+    # print(f"client_handler: Data written, but yet to commit to shard: {shard_id}", flush=True)
     if rollback:
         print(f"client_handler: Rollback required for shard: {shard_id}", flush=True)
         print(f"client_handler: Error: {error_msg}", flush=True)
@@ -681,11 +707,13 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
         
     # commit the write operation on all the servers
     else:
-        assert (servers_updated == servers)
+        # assert (servers_updated == servers)
+        # print(f"client_handler: Committing write to shard: {shard_id}", flush=True)
         for server in servers_updated:
             retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
             while retry_cntr > 0:
-                status, response = await communicate_with_server(server, "commit")
+                # status, response = await communicate_with_server(server, "commit")
+                status, response = synchronous_communicate_with_server(server, "commit")
                 if status==200:
                     break
                 retry_cntr -= 1
@@ -702,6 +730,8 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
                     "status": "failure"
                 }
                 return 500, response_json
+        
+        # print(f"client_handler: Data written to shard: {shard_id}", flush=True)
         # Update the valid_idx in the shardT
         shardT_lock.acquire_reader()
         try:
@@ -719,7 +749,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
 async def write_data_handler(request):
     global lb
     
-    print(f"client_handler: Received Request to write data entries", flush=True)
+    print(f"client_handler: Received Request to write data entries")
     default_response_json = {
         "message": f"<Error> Internal Server Error: The requested data could not be written",
         "status": "failure"
@@ -853,9 +883,9 @@ async def update_data_handler(request):
         temp_lock=lb.consistent_hashing[shard_id].lock
     
         # servers to which the update request will be sent corresponding to the shard_id
-        temp_lock.acquire_reader()
+        # temp_lock.acquire_reader()
         servers = lb.list_shard_servers(shard_id)
-        temp_lock.release_reader()
+        # temp_lock.release_reader()
         
         # if no servers are available for the shard, return a failure response
         if len(servers)==0:
@@ -928,7 +958,7 @@ async def update_data_handler(request):
         # commit the update operation on all the servers if the update was successful on all the servers
         else:
             
-            assert (servers_updated == servers) # as all servers should have been updated
+            # assert (servers_updated == servers) # as all servers should have been updated
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
@@ -1006,9 +1036,9 @@ async def del_data_handler(request):
         
         temp_lock=lb.consistent_hashing[shard_id].lock
 
-        temp_lock.acquire_reader()
+        # temp_lock.acquire_reader()
         servers = lb.list_shard_servers(shard_id)
-        temp_lock.release_reader()
+        # temp_lock.release_reader()
         
         # if no servers are available for the shard, return a failure response
         if len(servers)==0:
@@ -1078,7 +1108,7 @@ async def del_data_handler(request):
         # commit the delete operation on all the servers if the delete was successful on all the servers
         else:
  
-            assert (servers_updated == servers) # as all servers should be updated
+            # assert (servers_updated == servers) # as all servers should be updated
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:

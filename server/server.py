@@ -139,7 +139,7 @@ async def write_database(request):
                 "current_idx":id,
                 "status": "failure"
             }
-            
+        # print(f"Response: {response_data}", flush=True)
         return web.json_response(response_data, status=status)  
     
     except Exception as e:

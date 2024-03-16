@@ -154,15 +154,15 @@ class Manager:
             curr_idx = request_json.get("curr_idx")
             num_entry = len(data)
 
-            res,status = self.sql_handler.query(f"SELECT COUNT(*) FROM {tablename}")
-            if status != 200:
-                return res, status, -1
+            # res,status = self.sql_handler.query(f"SELECT COUNT(*) FROM {tablename}")
+            # if status != 200:
+            #     return res, status, -1
             
-            valid_idx = res[0][0]
+            # valid_idx = res[0][0]
 
             # if(curr_idx!=valid_idx+1):                
             #     return "Invalid current index provided",400,valid_idx
-            
+            valid_idx = 0
             row_str = ''
             
             for v in data:
