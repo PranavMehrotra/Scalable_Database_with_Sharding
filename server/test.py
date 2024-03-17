@@ -1,7 +1,6 @@
 import asyncio
 from time import sleep
 import aiohttp
-import datetime
 
 async def send_json_request(json_data):
     try:

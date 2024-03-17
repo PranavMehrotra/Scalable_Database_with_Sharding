@@ -1,6 +1,6 @@
 while true; do
   # Take input from user, for add or remove servers
-  echo -n "Enter home/rep/add/rm/exit: "
+  echo -n "Enter home/rep/add/rm/init/status/exit/: "
   read action
 
   # Check if action is add or rm (case insensitive)

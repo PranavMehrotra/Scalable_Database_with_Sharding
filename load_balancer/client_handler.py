@@ -64,18 +64,18 @@ def find_shard_id(stud_id):
     # if stud_id is less than the lowest stud_id, then it is invalid
     if (idx<0):
         shardT_lock.release_reader()
-        err= "Invalid Stud_id: Stud_id does not exist in the database"
+        err= "Invalid Stud_id: No matching entries found in the database"
         return "", -1, err
     # if stud_id is greater than or equal to the shard size, then it is invalid
     elif (stud_id >= stud_id_low[idx][1]):
         shardT_lock.release_reader()
-        err= "Invalid Stud_id: Stud_id does not exist in the database"
+        err= "Invalid Stud_id: No matching entries found in the database"
         return "", -1, err
     
     # # if stud_id is greater than the highest valid index in the shard, then it is invalid
     # elif (stud_id > shardT[stud_id_low[idx]][2]):
     #     shardT_lock.release_reader()
-    #     err= "Invalid Stud_id: Stud_id does not exist in the database"
+    #     err= "Invalid Stud_id: No matching entries found in the database"
     #     return "", err
     
     else:
@@ -119,7 +119,7 @@ def find_shard_id_range(low, high):
  
     if (idx_left > len(stud_id_low)-1):
         shardT_lock.release_reader()
-        return [], "Invalid range: The range of stud_ids does not exist in the database." 
+        return [], "No matching entries found for the given range of Stud_ids"
 
     # limit_left = stud_id_low[idx_left]
     limit_left = max(low, stud_id_low[idx_left][0])
@@ -128,7 +128,7 @@ def find_shard_id_range(low, high):
     idx_right = bisect.bisect_right(stud_id_low, (high, INT_MAX))-1
     if (idx_right<0):
         shardT_lock.release_reader()
-        return [], "Invalid range: The range of stud_ids does not exist in the database."
+        return [], "No matching entries found for the given range of Stud_ids"
     
     if (high >= stud_id_low[idx_right][1]):
         limit_right = stud_id_low[idx_right][1]
@@ -141,7 +141,7 @@ def find_shard_id_range(low, high):
         shards.append((shardT[stud_id_low[idx_left][0]][0], limit_left, limit_right, stud_id_low[idx_left][0]))
         shardT_lock.release_reader()
         if len(shards) == 0:
-            err= "Invalid range: The range of stud_ids does not exist in the database."
+            err= "No matching entries found for the given range of Stud_ids"
         return shards, err
     
     elif (idx_left < idx_right):
@@ -153,12 +153,12 @@ def find_shard_id_range(low, high):
         shards.append((shardT[stud_id_low[idx_right][0]][0], stud_id_low[idx_right][0], limit_right, stud_id_low[idx_right][0]))
         shardT_lock.release_reader()
         if len(shards) == 0:
-            err= "Invalid range: The range of stud_ids does not exist in the database."
+            err= "No matching entries found for the given range of Stud_ids"
         return shards, err
     
     else:
         shardT_lock.release_reader()
-        return [], "Invalid range: The range of stud_ids does not exist in the database."
+        return [], "No matching entries found for the given range of Stud_ids"
 
 
 async def communicate_with_server(server, endpoint, payload={}):
@@ -389,7 +389,8 @@ async def add_server_handler(request):
     }
     for server in added_servers:
         payload["shards"] = serv_to_shard[server]
-        status, response = await communicate_with_server(server, "config", payload)
+        # status, response = await communicate_with_server(server, "config", payload)
+        status, response = synchronous_communicate_with_server(server, "config", payload)
         if status!=200:
             print(f"client_handler: Failed to configure server: {server}")
             print(f"client_handler: Error: {response.get('message', 'Unknown Error')}", flush=True)
@@ -551,15 +552,16 @@ async def read_data_handler(request):
         #         "Stud_id": {"low": low, "high": high}
         #     }
             
-        #     status, response = await communicate_with_server(server, "read", server_json)
+        #     status, response = synchronous_communicate_with_server(server, "read", server_json)
         #     if status==200:
-        #         data_read.append(response.get("data", []))
+        #         data_read.extend(response.get("data", []))
         #         shards_read.append(shard_id)
         #     else:
         #         data_read = []
         #         shards_read = []
         #         return web.json_response(default_response_json, status=500)
-            
+
+        # print(f"client_handler: Data read from shards: {shards_read}", flush=True)   
         # response_json = {
         #     "shards_queried": shards_read,
         #     "data": data_read,
@@ -589,18 +591,31 @@ async def read_data_handler(request):
         results = await asyncio.gather(*tasks)
         
         success_flag = True
-        for status, response, shard_id in zip(results, shard_range_list):
+        for (status, response), shard_id in zip(results, shard_range_list):
+        
         # for status, response in results:
             if status!=200:
                 print(f"client_handler: <Error> Failed to read data from shard: {shard_id[0]}, message: {response.get('message', 'Internal Server Error')}", flush=True)
                 # print(f"client_handler: <Error> Failed to read data, message: {response.get('message', 'Internal Server Error')}", flush=True)
+                print(f"message : {response.get('message')}", flush=True)
+                if (response.get('message', 'Internal Server Error')=="No matching entries found"):
+                    continue
+                    
                 success_flag = False
             else:
-                data_read.append(response.get("data", []))
+                data_read.extend(response.get("data", []))
                 shards_read.append(shard_id[0])
                 
         if not success_flag:
             return web.json_response(default_response_json, status=500)
+        
+        if len(data_read)==0: # to handle the case when no matching entries are found
+            response_json = {
+                "shards_queried": shards_read,
+                "message": f"No matching entries found for the given range of Stud_ids",
+                "status": "success"
+            }
+            return web.json_response(response_json, status=200)
         
         print(f"client_handler: Data read from shards: {shards_read}", flush=True)
         response_json = {
@@ -657,9 +672,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
     for server in servers:
         # print(f"client_handler: Writing data to server: {server}, payload: {payload}", flush=True)
         # write the entry on the servers one by one
-        # status, response = await communicate_with_server(server, "write", payload)
         status, response = synchronous_communicate_with_server(server, "write", payload)
-        # print(f"client_handler: Write response from server: {server}, shard: {shard_id} status: {status}, response: {response}", flush=True)
         if status==200:
             servers_updated.append(server)
         else:
@@ -668,7 +681,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
                 error_flag = True
             rollback = True
             break
-    # print(f"client_handler: Data written, but yet to commit to shard: {shard_id}", flush=True)
+        
     if rollback:
         print(f"client_handler: Rollback required for shard: {shard_id}", flush=True)
         print(f"client_handler: Error: {error_msg}", flush=True)
@@ -676,7 +689,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
         for server in servers_updated:
             retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
             while retry_cntr > 0:
-                status, response = await communicate_with_server(server, "rollback")
+                status, response = synchronous_communicate_with_server(server, "rollback")
                 if status==200:
                     break
                 retry_cntr -= 1
@@ -708,11 +721,9 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
     # commit the write operation on all the servers
     else:
         # assert (servers_updated == servers)
-        # print(f"client_handler: Committing write to shard: {shard_id}", flush=True)
         for server in servers_updated:
             retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
             while retry_cntr > 0:
-                # status, response = await communicate_with_server(server, "commit")
                 status, response = synchronous_communicate_with_server(server, "commit")
                 if status==200:
                     break
@@ -731,7 +742,6 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
                 }
                 return 500, response_json
         
-        # print(f"client_handler: Data written to shard: {shard_id}", flush=True)
         # Update the valid_idx in the shardT
         shardT_lock.acquire_reader()
         try:
@@ -868,6 +878,13 @@ async def update_data_handler(request):
             }
             return web.json_response(response_json, status=400)
         
+        if 'Stud_id' not in request_json["data"]:
+            response_json = {
+                "message": f"<Error> Invalid payload format: 'Stud_id' field missing in 'data' field",
+                "status": "failure"
+            }
+            return web.json_response(response_json, status=400)
+        
         stud_id=request_json.get("Stud_id")
         # Find the shard to be updated for the given Stud_id
         shard_id, shard_stud_id_low, err = find_shard_id(stud_id) 
@@ -908,7 +925,7 @@ async def update_data_handler(request):
         # update the entry one by one on all the servers which have a replica of the shard
         for server in servers:
             # update the entry on the servers one by one
-            status, response = await communicate_with_server(server, "update", server_json)
+            status, response = synchronous_communicate_with_server(server, "update", server_json)
             if status==200:
                 servers_updated.append(server)
             else: # if the update request failed on a server
@@ -924,7 +941,7 @@ async def update_data_handler(request):
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT # retry counter for commit/rollback operations on the servers
                 while retry_cntr > 0:
-                    status, response = await communicate_with_server(server, "rollback")
+                    status, response = synchronous_communicate_with_server(server, "rollback")
                     if status==200:
                         break
                     retry_cntr -= 1
@@ -962,7 +979,7 @@ async def update_data_handler(request):
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
-                    status, response = await communicate_with_server(server, "commit")
+                    status, response = synchronous_communicate_with_server(server, "commit")
                     if status==200:
                         break
                     retry_cntr -= 1
@@ -982,7 +999,7 @@ async def update_data_handler(request):
                     return web.json_response(response_json, status=500)
                 
             temp_lock.release_writer()
-            
+            print(f"client_handler: Data entry with Stud_id:{stud_id} updated in all replicas", flush=True)
             response_json = {
                 "message": f"Data entry with Stud_id:{stud_id} updated in the database",
                 "status": "success"
@@ -1059,7 +1076,7 @@ async def del_data_handler(request):
         temp_lock.acquire_writer()
         for server in servers:            
             # delete the entry from the servers one by one
-            status, response = await communicate_with_server(server, "del", server_json)
+            status, response = synchronous_communicate_with_server(server, "del", server_json)
             if status==200:
                 servers_updated.append(server)
             else:
@@ -1075,7 +1092,7 @@ async def del_data_handler(request):
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
-                    status, response = await communicate_with_server(server, "rollback")
+                    status, response = synchronous_communicate_with_server(server, "rollback")
                     if status==200:
                         break
                     retry_cntr -= 1
@@ -1112,7 +1129,7 @@ async def del_data_handler(request):
             for server in servers_updated:
                 retry_cntr = COMMIT_ROLLBACK_RETRY_CNT
                 while retry_cntr > 0:
-                    status, response = await communicate_with_server(server, "commit")
+                    status, response = synchronous_communicate_with_server(server, "commit")
                     if status==200:
                         break
                     retry_cntr -= 1 
@@ -1136,9 +1153,9 @@ async def del_data_handler(request):
             shardT_lock.release_reader()
 
             temp_lock.release_writer()
-            
+            print(f"client_handler: Data entry with Stud_id:{stud_id} deleted from all replicas", flush=True)
             response_json = {
-                "message": f"Data entry with Stud_id:{stud_id} removed from all replicas",
+                "message": f"Data entry with Stud_id:{stud_id} deleted from all replicas",
                 "status": "success"
             }
             return web.json_response(response_json, status=200)
@@ -1196,7 +1213,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
         "StudT_schema": StudT_schema,
     }
     # if not await config_server(db_server_hostname, payload):
-    status, response = await communicate_with_server(db_server_hostname, "config", payload)
+    status, response = synchronous_communicate_with_server(db_server_hostname, "config", payload)
     if status!=200:
         response_json = {
             "message": f"<Error> Failed to configure the db_server, error: {response}",
@@ -1213,7 +1230,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
         # Map ShardT_schema["columns"] to shard, val
         payload["data"].append(dict(zip(ShardT_schema["columns"], [shard] + val)))
     # print(f"client_handler: Writing ShardT to db_server: {payload}", flush=True)
-    status, response = await communicate_with_server(db_server_hostname, "write", payload)
+    status, response = synchronous_communicate_with_server(db_server_hostname, "write", payload)
     # if not await write_server(db_server_hostname, payload):
     if status!=200:
         response_json = {
@@ -1230,7 +1247,7 @@ async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
         for shard in shards:
             payload["data"].append(dict(zip(MapT_schema["columns"], [shard, server])))
     # if not await write_server(db_server_hostname, payload):
-    status, response = await communicate_with_server(db_server_hostname, "write", payload)
+    status, response = synchronous_communicate_with_server(db_server_hostname, "write", payload)
     if status!=200:
         response_json = {
             "message": f"<Error> Failed to write MapT table to the db_server",
@@ -1391,7 +1408,7 @@ async def init_handler(request):
         payload["shards"] = serv_to_shard[server]
         # Send a POST request to the server /config endpoint to initialize the database
         # if not await config_server(server, payload):
-        status, response = await communicate_with_server(server, "config", payload)
+        status, response = synchronous_communicate_with_server(server, "config", payload)
         if status!=200:
             error=str(response.get("message", "Unknown Error"))
             response_json = {

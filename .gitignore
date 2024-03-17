@@ -163,3 +163,4 @@ cython_debug/
 temp.txt
 temp_git_ignore/
 analysis.py
+error_log*.txt

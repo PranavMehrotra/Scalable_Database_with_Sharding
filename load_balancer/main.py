@@ -15,6 +15,7 @@ import client_handler
 
 
 if __name__ == "__main__":
+    
     client_handler.run_load_balancer()
     # Lb = load_balancer.LoadBalancer()
     # Lb.add_servers(2, ['server1', 'server2'])
