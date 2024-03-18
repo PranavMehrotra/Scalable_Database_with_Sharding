@@ -181,13 +181,9 @@ async def send_requests(
 
 if __name__ == '__main__':
   
-<<<<<<< Updated upstream
+
     NUM_WRITE_REQUESTS = 30
     NUM_READ_REQUESTS = 30
-=======
-    NUM_WRITE_REQUESTS = 10000
-    NUM_READ_REQUESTS = 10000
->>>>>>> Stashed changes
     NUM_UPDATE_REQUESTS = 1
     NUM_DELETE_REQUESTS = 1
     request_type = "write"

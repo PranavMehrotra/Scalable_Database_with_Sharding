@@ -237,23 +237,10 @@ class HeartBeat(threading.Thread):
             "schema": self.StudT_schema,
             "shards": shards_for_server
         }
-        
-        # try:
-        #     response = requests.post(f'http://{server_name}:5000/config', json=payload)
-        #     if response.status_code != 200:
-        #         # print(f"heartbeat: Error in configuring server {server_name}", flush=True)
-        #         return response.status_code, response.json.get('message', f'Unknown error in reconfiguring server {server_name}')
-        #     else:
-        #         # print(f"heartbeat: Server {server_name} reconfigured successfully!")
-                
-        #         # copy the shard data from the existing server to the new server
-        #         for shard_id in shards_for_server:
-        #             # find out other servers which have the same shard
-        #             servers = lb.list_shard_servers(shard_id)
           
-        print("Sleeping for 2 seconds", flush=True)          
+        # print("Sleeping for 2 seconds", flush=True)          
         time.sleep(2)
-        print("Sending config request to server", flush=True)
+        print("heartbeat: Sending config request to server", flush=True)
         
         
         status, response = synchronous_communicate_with_server(server_name, "config", payload)
@@ -351,78 +338,6 @@ class HeartBeat(threading.Thread):
                 return 200, "Server committed successfully"
                 
             
-        
-        
-            
-                    
-                        
-                    
-                
-        
-
-# async def check_heartbeat(Lb, server_name, server_ip="127.0.0.1", server_port=5000):
-#     print("heartbeat: Heartbeat thread started for server: ", server_name)
-    
-#     cntr = 0
-#     while True:
-#         # print("heartbeat: Starting a session!")
-#         async with aiohttp.ClientSession() as session:
-#             print("heartbeat: Session started!")
-            
-#             try:
-#                 async with session.get(f'http://{server_ip}:{server_port}/heartbeat') as response:
-#                     # print("heartbeat: Connected to server, Response received!")
-#                     # if response.status != 200 and {await response.text()}['message'] != "ok":
-                    
-#                     ## To-Do: Check for timeout also
-                    
-#                     if response.status != 200 and response.status != 400:
-#                         cntr += 1
-#                         if cntr >= 2:
-#                             print(f"heartbeat: Server {server_name} is down!")
-#                             print(f"heartbeat: Spawning a new server: {server_name}!")
-#                             cntr = 0
-                            
-#                             #remove server from
-#                             Lb.remove_servers(1, [server_name])
-                            
-#                             # reinstantiate an image of the server
-#                             Lb.add_servers(1, [server_name])
-                            
-#                             # print("heartbeat: Closing session!")
-#                             # await session.close()
-                            
-#                             # break
-#                     else :
-#                         cntr = 0       
-
-#             # except aiohttp.client_exceptions.ClientConnectorError as e:
-#             except Exception as e: # this is better as it is more generic and will catch all exceptions
-#                 print(f"heartbeat: Could not connect to server {server_name} due to {str(e.__class__.__name__)}")
-#                 cntr = 0 
-                
-#                 print(f"heartbeat: Server {server_name} is down!")
-#                 print(f"heartbeat: Spawning a new server: {server_name}!")
-#                 #remove server from
-#                 num_rem, servers_rem, error = Lb.remove_servers(1, [server_name])
-#                 print(f"heartbeat: Removed {num_rem} servers: {servers_rem}")
-                
-#                 # reinstantiate an image of the server
-#                 num_add, servers_add, error = Lb.add_servers(1, [server_name])
-#                 print(f"heartbeat: Added {num_add} servers: {servers_add}")
-                
-#                 # await session.close()
-#                 # print("heartbeat: Closing session!")
-                
-#                 # break
-        
-#         print("heartbeat: Closing session and sleeping!") 
-#         await session.close()              
-                        
-#         await asyncio.sleep(0.2)
-
-#     return
-    
 
         
     
