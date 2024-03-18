@@ -66,17 +66,12 @@ def find_shard_id(stud_id):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: No matching entries found in the database"
         return "", -1, err
+    
     # if stud_id is greater than or equal to the shard size, then it is invalid
     elif (stud_id >= stud_id_low[idx][1]):
         shardT_lock.release_reader()
         err= "Invalid Stud_id: No matching entries found in the database"
         return "", -1, err
-    
-    # # if stud_id is greater than the highest valid index in the shard, then it is invalid
-    # elif (stud_id > shardT[stud_id_low[idx]][2]):
-    #     shardT_lock.release_reader()
-    #     err= "Invalid Stud_id: No matching entries found in the database"
-    #     return "", err
     
     else:
         shard_id = shardT[stud_id_low[idx][0]][0]
@@ -111,17 +106,15 @@ def find_shard_id_range(low, high):
     
     if (idx_left<0):
         idx_left = 0
-        # limit_left = stud_id_low[idx_left][0]
         
     if (low >= stud_id_low[idx_left][1]):
         idx_left += 1
-        # limit_left = stud_id_low[idx_left][0
  
     if (idx_left > len(stud_id_low)-1):
         shardT_lock.release_reader()
         return [], "No matching entries found for the given range of Stud_ids"
 
-    # limit_left = stud_id_low[idx_left]
+    # limit_left = stud_id_low[idx_left][0]
     limit_left = max(low, stud_id_low[idx_left][0])
 
 
@@ -134,7 +127,6 @@ def find_shard_id_range(low, high):
         limit_right = stud_id_low[idx_right][1]
         
     shards = []
-    # print(f"client_handler: idx_left: {idx_left}, idx_right: {idx_right}", flush=True)
     
     if (idx_left == idx_right): # if the range lies within a single shard
         # if (shardT[stud_id_low[idx_left]][1] > 0):
@@ -161,6 +153,35 @@ def find_shard_id_range(low, high):
         return [], "No matching entries found for the given range of Stud_ids"
 
 
+def check_shard_ranges(shards: list) -> Tuple[bool, str]:
+    global stud_id_low
+    global shardT_lock
+    # Check if the shard ranges are valid
+    for i in range(len(shards)):
+        if shards[i][2]<=0:
+            return False, "Invalid shard size"
+    # Sort the shards based on the (start, end) of the shard range
+    shards.sort(key=lambda x: (x[0], x[0]+x[2]))
+    for i in range(len(shards)-1):
+        if shards[i][0]+shards[i][2] > shards[i+1][0]:
+            return False, "Shard ranges overlap"
+    
+    # Check if the shard ranges overlap with the existing shard ranges
+    shardT_lock.acquire_reader()
+    for shard in shards:
+        # Use the binary search to find the shard range that overlaps with the given shard
+        tem_tuple = (shard[0], shard[0]+shard[2])
+        idx = bisect.bisect_left(stud_id_low, tem_tuple)
+        if idx>0 and stud_id_low[idx-1][1]>tem_tuple[0]:
+            shardT_lock.release_reader()
+            return False, "Shard ranges overlap with existing shard ranges"
+        if idx<len(stud_id_low) and stud_id_low[idx][0]<tem_tuple[1]:
+            shardT_lock.release_reader()
+            return False, "Shard ranges overlap with existing shard ranges"
+    shardT_lock.release_reader()
+    return True, ""
+
+
 async def communicate_with_server(server, endpoint, payload={}):
     try:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
@@ -169,6 +190,7 @@ async def communicate_with_server(server, endpoint, payload={}):
             if endpoint == "copy" or endpoint == "commit" or endpoint == "rollback":
                 async with session.get(request_url, json=payload) as response:
                     return response.status, await response.json()
+                
                     # response_status = response.status
                     # if response_status == 200:
                     #     return True, await response.json()
@@ -216,6 +238,7 @@ def synchronous_communicate_with_server(server, endpoint, payload={}):
     except Exception as e:
         return 500, {"message": f"{e}"}
 
+
 # async def home(request):
 #     global lb
     
@@ -259,34 +282,18 @@ def synchronous_communicate_with_server(server, endpoint, payload={}):
 #             "status": "failure"
 #         }
 #         return web.json_response(response_json, status=400)
-    
-def check_shard_ranges(shards: list) -> Tuple[bool, str]:
-    global stud_id_low
-    global shardT_lock
-    # Check if the shard ranges are valid
-    for i in range(len(shards)):
-        if shards[i][2]<=0:
-            return False, "Invalid shard size"
-    # Sort the shards based on the (start, end) of the shard range
-    shards.sort(key=lambda x: (x[0], x[0]+x[2]))
-    for i in range(len(shards)-1):
-        if shards[i][0]+shards[i][2] > shards[i+1][0]:
-            return False, "Shard ranges overlap"
-    
-    # Check if the shard ranges overlap with the existing shard ranges
-    shardT_lock.acquire_reader()
-    for shard in shards:
-        # Use the binary search to find the shard range that overlaps with the given shard
-        tem_tuple = (shard[0], shard[0]+shard[2])
-        idx = bisect.bisect_left(stud_id_low, tem_tuple)
-        if idx>0 and stud_id_low[idx-1][1]>tem_tuple[0]:
-            shardT_lock.release_reader()
-            return False, "Shard ranges overlap with existing shard ranges"
-        if idx<len(stud_id_low) and stud_id_low[idx][0]<tem_tuple[1]:
-            shardT_lock.release_reader()
-            return False, "Shard ranges overlap with existing shard ranges"
-    shardT_lock.release_reader()
-    return True, ""
+
+ 
+# async def lb_analysis(request):
+#     global lb
+#     print(f"client_handler: Received Request to provide server load statistics", flush=True)
+#     load_count = lb.get_server_load_stats()
+#     response_json = {
+#         "message": f"Server Load Statistics:",
+#         "dict": load_count,
+#         "status": "successful"
+#     }
+#     return web.json_response(response_json, status=200)    
 
 
 async def add_server_handler(request):
@@ -295,6 +302,8 @@ async def add_server_handler(request):
     global shardT
     global shardT_lock
     global stud_id_low
+    global StudT_schema
+    
     try:
         # Get a payload json from the request
         payload = await request.json()
@@ -375,7 +384,7 @@ async def add_server_handler(request):
 
     # Spawn the heartbeat threads for the added servers
     for server in added_servers:
-        t1 = HeartBeat(lb, server)
+        t1 = HeartBeat(lb, server, StudT_schema)
         hb_threads[server] = t1
         t1.start()
 
@@ -406,7 +415,6 @@ async def add_server_handler(request):
     }
 
     return web.json_response(response_json, status=200)
-
 
 
 async def remove_server_handler(request):
@@ -474,21 +482,6 @@ async def remove_server_handler(request):
         "status": "successful"
     }
 
-    return web.json_response(response_json, status=200)
-
-
-async def rep_handler(request):
-    global lb
-    print(f"client_handler: Received Request to list all servers", flush=True)
-    # return a list of all the current servers
-    server_list = lb.list_servers()
-    response_json = {
-        "message": {
-            "N" : len(server_list),
-            "replicas": server_list
-        },
-        "status": "successful"
-    }
     return web.json_response(response_json, status=200)
 
 
@@ -759,7 +752,7 @@ async def write_one_shard(shard_id, shard_stud_id_low, data):
 async def write_data_handler(request):
     global lb
     
-    print(f"client_handler: Received Request to write data entries")
+    print(f"client_handler: Received Request to write data entries", flush=True)
     default_response_json = {
         "message": f"<Error> Internal Server Error: The requested data could not be written",
         "status": "failure"
@@ -849,6 +842,7 @@ async def write_data_handler(request):
             "status": "failure"
         }
         return web.json_response(response_json, status=400)
+
 
 # function to update an existing data entry across all shard replicas
 async def update_data_handler(request):
@@ -1167,19 +1161,7 @@ async def del_data_handler(request):
         }
         return web.json_response(response_json, status=400)
     
- 
-async def lb_analysis(request):
-    global lb
-    print(f"client_handler: Received Request to provide server load statistics", flush=True)
-    load_count = lb.get_server_load_stats()
-    response_json = {
-        "message": f"Server Load Statistics:",
-        "dict": load_count,
-        "status": "successful"
-    }
-    return web.json_response(response_json, status=200)
 
-## My changes below:
 # Function to send a heartbeat to the db server and return True if the server is alive, else False
 def heartbeat_db_server():
     try:
@@ -1191,7 +1173,6 @@ def heartbeat_db_server():
             return False
     except:
         return False
-
 
 
 async def spawn_and_config_db_server(serv_to_shard: Dict[str, list]):
@@ -1381,14 +1362,17 @@ async def init_handler(request):
         }
         return web.json_response(response_json, status=400)
     print(f"client_handler: Added {num_added} servers to the system", flush=True)
-    # Spawn the heartbeat threads for the added servers
-    for server in added_servers:
-        t1 = HeartBeat(lb, server)
-        hb_threads[server] = t1
-        t1.start()
 
     # Populate the StudT_schema
     StudT_schema = studt_schema
+    
+    # Spawn the heartbeat threads for the added servers
+    for server in added_servers:
+        t1 = HeartBeat(lb, server, StudT_schema)
+        hb_threads[server] = t1
+        t1.start()
+
+
     
     # await asyncio.sleep(SLEEP_BEFORE_FIRST_REQUEST)
 
@@ -1494,7 +1478,7 @@ def recover_from_db_server():
                 print(f"client_handler: Added {num_added} servers to the system")
                 # Spawn the heartbeat threads for the added servers
                 for server in added_servers:
-                    t1 = HeartBeat(lb, server)
+                    t1 = HeartBeat(lb, server, StudT_schema)
                     hb_threads[server] = t1
                     t1.start()
                 return True
@@ -1559,10 +1543,10 @@ def run_load_balancer():
 
     app = web.Application()
     # app.router.add_get('/home', home)
+    # app.router.add_get('/lb_analysis', lb_analysis)
+    
     app.router.add_post('/add', add_server_handler)
     app.router.add_delete('/rm', remove_server_handler)
-    app.router.add_get('/rep', rep_handler)
-    app.router.add_get('/lb_analysis', lb_analysis)
     app.router.add_post('/init', init_handler)
     app.router.add_get('/status', status_handler)
     
@@ -1581,57 +1565,49 @@ def run_load_balancer():
     for thread in hb_threads.values():
         thread.join()
 
-if __name__ == "__main__":
-    # global shardT
-    # global stud_id_low
-    shardT = {}
-    stud_id_low = []
-    # shardT["sh1"] = [0, 100, 0]
-    # shardT["sh2"] = [101, 200, 0]
-    # shardT["sh3"] = [201, 300, 0]
-    # shardT["sh4"] = [301, 400, 0]
-    # shardT["sh5"] = [401, 500, 0]
-    # shardT["sh6"] = [501, 600, 0]
-    # shardT["sh7"] = [601, 700, 0]
-    # shardT["sh8"] = [701, 800, 0]
-    # shardT["sh9"] = [801, 900, 0]
-    # shardT["sh10"] = [901, 1000, 0]
-    shardT[0] = ["sh1", 100, 0]
-    shardT[100] = ["sh2", 100, 0]
-    shardT[200] = ["sh3", 100, 0]
-    shardT[300] = ["sh4", 100, 0]
-    shardT[400] = ["sh5", 100, 0]
-    shardT[500] = ["sh6", 79, 0]
-    shardT[580] = ["sh7", 100, 0]
-    shardT[700] = ["sh8", 100, 0]
-    shardT[800] = ["sh9", 100, 0]
-    shardT[900] = ["sh10", 100, 0]
-    shardT[1001] = ["sh11", 1, 0]
-    shardT[1002] = ["sh12", 0, 0]
+
+# if __name__ == "__main__":
+#     # global shardT
+#     # global stud_id_low
+#     shardT = {}
+#     stud_id_low = []
+
+#     shardT[0] = ["sh1", 100, 0]
+#     shardT[100] = ["sh2", 100, 0]
+#     shardT[200] = ["sh3", 100, 0]
+#     shardT[300] = ["sh4", 100, 0]
+#     shardT[400] = ["sh5", 100, 0]
+#     shardT[500] = ["sh6", 79, 0]
+#     shardT[580] = ["sh7", 100, 0]
+#     shardT[700] = ["sh8", 100, 0]
+#     shardT[800] = ["sh9", 100, 0]
+#     shardT[900] = ["sh10", 100, 0]
+#     shardT[1001] = ["sh11", 1, 0]
+#     shardT[1002] = ["sh12", 0, 0]
     
     
-    stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 579), (580, 680), (700, 800), (800, 900), (900, 1000), (1001, 1002), (1002, 1002)]
+#     stud_id_low = [(0, 100), (100, 200), (200, 300), (300, 400), (400, 500), (500, 579), (580, 680), (700, 800), (800, 900), (900, 1000), (1001, 1002), (1002, 1002)]
     
-    # shard_id1, err = find_shard_id(51)
-    # print(f"Shard ID for 51: {shard_id1}, {err}")
-    # shard_id2, err = find_shard_id(0)
-    # print(f"Shard ID for 0: {shard_id2}, {err}")
-    # shard_id3, err = find_shard_id(-1)
-    # print(f"Shard ID for -1: {shard_id3}, {err}")
-    # shard_id4, err = find_shard_id(1000)
-    # print(f"Shard ID for 1000: {shard_id4}, {err}")
-    # shard_id5, err = find_shard_id(1001)
-    # print(f"Shard ID for 1001: {shard_id5}, {err}")
-    # shard_id6, err = find_shard_id(1002)
-    # print(f"Shard ID for 1002: {shard_id6}, {err}")
+#     # shard_id1, err = find_shard_id(51)
+#     # print(f"Shard ID for 51: {shard_id1}, {err}")
+#     # shard_id2, err = find_shard_id(0)
+#     # print(f"Shard ID for 0: {shard_id2}, {err}")
+#     # shard_id3, err = find_shard_id(-1)
+#     # print(f"Shard ID for -1: {shard_id3}, {err}")
+#     # shard_id4, err = find_shard_id(1000)
+#     # print(f"Shard ID for 1000: {shard_id4}, {err}")
+#     # shard_id5, err = find_shard_id(1001)
+#     # print(f"Shard ID for 1001: {shard_id5}, {err}")
+#     # shard_id6, err = find_shard_id(1002)
+#     # print(f"Shard ID for 1002: {shard_id6}, {err}")
 
     
-    low = 593
-    high= 632
-    shards, err = find_shard_id_range(low, high)
-    print(f"Shards for the range: {low}-{high}: {shards}, {err}")
+#     low = 593
+#     high= 632
+#     shards, err = find_shard_id_range(low, high)
+#     print(f"Shards for the range: {low}-{high}: {shards}, {err}")
 
-    shard, _, err = find_shard_id(low)
-    print(f"Shard for the value: {low}: {shard}, {err}")
+#     shard, _, err = find_shard_id(low)
+#     print(f"Shard for the value: {low}: {shard}, {err}")
     
     

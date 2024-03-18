@@ -127,6 +127,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.vscode
 
 # Spyder project settings
 .spyderproject
@@ -164,3 +165,4 @@ temp.txt
 temp_git_ignore/
 analysis.py
 error_log*.txt
+
