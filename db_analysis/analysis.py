@@ -153,7 +153,8 @@ async def read_shard(session, json_data):
                     print("No of data points read for shard 1:", len([data for data in data_list if data["Stud_id"] < 4096]))
                     print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
                     print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
-                    print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < STUD_ID_MAX]))
+                    print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
+                    print("No of data points read for shard 5:", len([data for data in data_list if data["Stud_id"] >= 16384 and data["Stud_id"] < 20480]))
                 else:
                     print(f"Response message: {response_json.get('message', 'No message')}")
                 # print("No of data points 
@@ -227,10 +228,10 @@ async def send_requests(
                 num_per_req = num_requests//100
                 
                 # 100 reqs, each of num_per_req data points
-                tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*num_per_req+j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(num_per_req)]}) for i in range(100)]
+                # tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*num_per_req+j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(num_per_req)]}) for i in range(100)]
                 
                 # num_requests reqs, with 1 data point each
-                # tasks = [write_shard(session, {"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]}) for id in ids]
+                tasks = [write_shard(session, {"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]}) for id in ids]
                 
                 # FOR Loop
                 # tasks = [{"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]} for id in ids]
@@ -239,8 +240,8 @@ async def send_requests(
             elif type == "read":
                 for i in range(num_requests):
                     low,high = generate_random_range()
-                    low = 0
-                    high = STUD_ID_MAX
+                    # low = 0
+                    # high = STUD_ID_MAX
                     read_json = {
                         "Stud_id":{ "low": low, "high": high}
                     }
