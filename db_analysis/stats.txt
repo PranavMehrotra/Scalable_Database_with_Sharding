@@ -1,0 +1,13 @@
+PART-1:
+
+- Request Type: read
+
+    No of successful requests: 10000/10000
+    No of failed requests: 0/10000
+    Time taken to send 10000 requests: 60.557310581207275 seconds
+
+Request Type: write
+
+No of successful requests: 10000/10000
+No of failed requests: 0/10000
+Time taken to send 10000 requests: 188.25956535339355 seconds
