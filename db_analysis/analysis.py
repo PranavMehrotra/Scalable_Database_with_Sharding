@@ -11,6 +11,7 @@ ip_address = '0.0.0.0'
 port = 5000
 STUD_ID_MAX = 16000
 SHARD_SIZE = 4096
+SEMAPHORE_LIMIT = 1000
 
 def generate_random_string(length=4):
     letters = string.ascii_uppercase
@@ -185,22 +186,23 @@ async def read_shard(session, json_data):
         print("Error:", e)
         return 500
 
-async def write_shard(session, json_data):
+async def write_shard(sem, session, json_data):
     try:
         # print(f"Sending Write Request: {json_data}")
         # connector = aiohttp.TCPConnector(force_close=True)
         # async with aiohttp.ClientSession(connector=connector) as session:
-        async with session.post(f'http://{ip_address}:{port}/write', json=json_data) as response:
-            if response.status == 200:
-                # print("JSON Request Successful")
-                # print(await response.json())
-                pass
-            else:
-                print(f"Error in JSON Request {response.status}")
-                print(await response.text(), flush=True)
-            return response.status
+        async with sem:
+            async with session.post(f'http://{ip_address}:{port}/write', json=json_data) as response:
+                if response.status == 200:
+                    # print("JSON Request Successful")
+                    # print(await response.json())
+                    pass
+                else:
+                    print(f"Error in JSON Request {response.status}")
+                    print(await response.text(), flush=True)
+                return response.status
     except Exception as e:
-        print("Error:", e)
+        print("Error: ", str(e))
         return 500
 
 async def update_shard_entry(session, json_data):
@@ -239,6 +241,7 @@ async def send_requests(
         type: str = "write",
         args: Dict = None):
     try:
+        sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
         async with aiohttp.ClientSession() as session:
             tasks = []
             if type == "write":
@@ -247,12 +250,11 @@ async def send_requests(
                 num_bundled_requests = num_requests//100
                 
                 # 100 reqs, each of num_per_req data points
-                # tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*num_per_req+j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(num_per_req)]}) for i in range(100)]
-                # tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*100 + j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(100)]}) for i in range(num_bundled_requests)]
-                
+                # tasks = [write_shard(sem, session, {"data": [{"Stud_id": ids[i*num_per_req+j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(num_per_req)]}) for i in range(100)]
+                # num_bundled_requests reqs, each of 100 data points
+                # tasks = [write_shard(sem, session, {"data": [{"Stud_id": ids[i*100 + j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(100)]}) for i in range(num_bundled_requests)]
                 # num_requests reqs, with 1 data point each
-                
-                tasks = [write_shard(session, {"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]}) for id in ids]
+                tasks = [write_shard(sem, session, {"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]}) for id in ids]
                 
                 # FOR Loop
                 # tasks = [{"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]} for id in ids]
