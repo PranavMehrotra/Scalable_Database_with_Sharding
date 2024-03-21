@@ -184,7 +184,7 @@ def check_shard_ranges(shards: list) -> Tuple[bool, str]:
 
 async def communicate_with_server(server, endpoint, payload={}):
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
             request_url = f'http://{server}:{SERVER_PORT}/{endpoint}'
             
             if endpoint == "copy" or endpoint == "commit" or endpoint == "rollback":
@@ -259,7 +259,7 @@ def synchronous_communicate_with_server(server, endpoint, payload={}):
 
 #     try:
 #         # Send the request to the server and get the response, use aiohttp
-#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
 #             async with session.get(f'http://{server}:{SERVER_PORT}/home') as response:
 #             # async with request.app['client_session'].get(f'http://{server}:{SERVER_PORT}/home') as response:
 #                 response_json = await response.json()

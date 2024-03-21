@@ -9,7 +9,7 @@ random.seed(42)
 
 ip_address = '0.0.0.0'
 port = 5000
-STUD_ID_MAX = 12000
+STUD_ID_MAX = 16000
 SHARD_SIZE = 4096
 
 def generate_random_string(length=4):
@@ -20,7 +20,7 @@ def generate_random_string(length=4):
 def generate_random_range():
     low = random.randint(0, STUD_ID_MAX)
     # high = random.randint(low, low + 1000)
-    high = random.randint(low, low + 2000)
+    high = random.randint(low, low + 4000)
     return low, high
 
 def create_consistent_hashmap(servers: int,
@@ -85,7 +85,25 @@ def create_init_json(args: Dict) -> Dict:
             }
             for i in range(shards)
         ],
-        "servers": create_consistent_hashmap(servers, shards, replicas)
+        # "servers": create_consistent_hashmap(servers, shards, replicas)
+        "servers":{ 'Server0': ['sh1', 'sh2', 'sh3', 'sh4'],
+                    'Server1': ['sh3', 'sh4', 'sh2', 'sh1'],
+                    'Server2': ['sh4', 'sh1', 'sh2', 'sh3'],
+                    'Server3': ['sh1', 'sh2', 'sh3', 'sh4'],
+                    'Server4': ['sh3', 'sh4', 'sh2', 'sh1'],
+                    'Server5': ['sh4', 'sh1', 'sh2', 'sh3']
+                    
+                    
+                    
+                    
+                    
+                    # 'Server1': ['sh3', 'sh4', 'sh2'],
+                    # 'Server2': ['sh4', 'sh1', 'sh2'],
+                    # 'Server3': ['sh1', 'sh2', 'sh3'],
+                    # 'Server4': ['sh3', 'sh4', 'sh2'],
+                    # 'Server5': ['sh4', 'sh1', 'sh2']
+                    
+                  }
     }
 
 # ----- API Calls -----
@@ -144,8 +162,8 @@ async def read_shard(session, json_data):
 
                     print("No of data points read:", len(data_list))
 
-                    data_list.sort(key=lambda x: x["Stud_id"])
-                    print("Data points read:")
+                    # data_list.sort(key=lambda x: x["Stud_id"])
+                    # print("Data points read:")
 
                     # for data in response_json.get("data", []):
                     #     print(data)
@@ -154,7 +172,7 @@ async def read_shard(session, json_data):
                     print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
                     print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
                     print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
-                    print("No of data points read for shard 5:", len([data for data in data_list if data["Stud_id"] >= 16384 and data["Stud_id"] < 20480]))
+                    # print("No of data points read for shard 5:", len([data for data in data_list if data["Stud_id"] >= 16384 and data["Stud_id"] < 20480]))
                 else:
                     print(f"Response message: {response_json.get('message', 'No message')}")
                 # print("No of data points 
@@ -225,12 +243,15 @@ async def send_requests(
             tasks = []
             if type == "write":
                 ids = list(random.sample(range(1, STUD_ID_MAX), num_requests))
-                num_per_req = num_requests//100
+                # num_per_req = num_requests//100
+                num_bundled_requests = num_requests//100
                 
                 # 100 reqs, each of num_per_req data points
                 # tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*num_per_req+j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(num_per_req)]}) for i in range(100)]
+                # tasks = [write_shard(session, {"data": [{"Stud_id": ids[i*100 + j], "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)} for j in range(100)]}) for i in range(num_bundled_requests)]
                 
                 # num_requests reqs, with 1 data point each
+                
                 tasks = [write_shard(session, {"data": [{"Stud_id": id, "Stud_name": generate_random_string(), "Stud_marks": random.randint(0, 100)}]}) for id in ids]
                 
                 # FOR Loop

@@ -42,7 +42,7 @@ def synchronous_communicate_with_server(server, endpoint, payload={}):
 
 # async def communicate_with_server(server, endpoint, payload={}):
 #     try:
-#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=0.5)) as session:
+#         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=1)) as session:
 #             request_url = f'http://{server}:{SERVER_PORT}/{endpoint}'
             
 #             if endpoint == "copy" or endpoint == "commit" or endpoint == "rollback":
@@ -109,7 +109,7 @@ class HeartBeat(threading.Thread):
                     # if response.status != 200 and {await response.text()}['message'] != "ok":
                     
                     ## To-Do: Check for timeout also
-                response = requests.get(f'http://{server_name}:{server_port}/heartbeat', timeout=0.1)
+                response = requests.get(f'http://{server_name}:{server_port}/heartbeat', timeout=1)
                 if response.status_code != 200 and response.status_code != 400:
                     cntr += 1
                     if cntr >= 2:

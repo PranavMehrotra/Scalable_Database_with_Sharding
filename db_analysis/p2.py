@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--type", type=str, required=True, default="read")
 parser.add_argument("--nreqs", type=int, default=1)
-parser.add_argument("--servers", type=int, default=5)
+parser.add_argument("--servers", type=int, default=6)
 parser.add_argument("--shards", type=int, default=4)
 parser.add_argument("--replicas", type=int, default=3)
 
