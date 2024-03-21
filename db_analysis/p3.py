@@ -7,17 +7,17 @@ from analysis import send_requests
 random.seed(42)
 
 '''
-    TASK 2:
+    TASK 3:
 
-     - Increase shard replicas to 6.
+     - Increase servers to 10, shards to 6 and replicas to 8.
      - Compute speeds for 10000 read and 10000 write requests.
 
 '''
 
 SHARD_SIZE = 4096
-NUM_SERVERS = 6
-NUM_SHARDS = 4
-NUM_REPLICAS = 6
+NUM_SERVERS = 10
+NUM_SHARDS = 6
+NUM_REPLICAS = 8
 
 parser = argparse.ArgumentParser()
 
@@ -53,12 +53,16 @@ if __name__ == '__main__':
                 ],
                 "servers":
                 { 
-                            'Server0': ['sh1', 'sh2', 'sh3', 'sh4'],
-                            'Server1': ['sh3', 'sh4', 'sh2', 'sh1'],
-                            'Server2': ['sh4', 'sh1', 'sh2', 'sh3'],
-                            'Server3': ['sh1', 'sh2', 'sh3', 'sh4'],
-                            'Server4': ['sh3', 'sh4', 'sh2', 'sh1'],
-                            'Server5': ['sh4', 'sh1', 'sh2', 'sh3']
+                            'Server0': ['sh1', 'sh2', 'sh3', 'sh4', 'sh5'],
+                            'Server1': ['sh1', 'sh2', 'sh3', 'sh4', 'sh6'],
+                            'Server2': ['sh1', 'sh2', 'sh3', 'sh5', 'sh6'],
+                            'Server3': ['sh1', 'sh2', 'sh4', 'sh5', 'sh6'],
+                            'Server4': ['sh1', 'sh3', 'sh4', 'sh5', 'sh6'],
+                            'Server5': ['sh2', 'sh3', 'sh4', 'sh5', 'sh6'],
+                            'Server6': ['sh2', 'sh3', 'sh4', 'sh5', 'sh1'],
+                            'Server7': ['sh3', 'sh4', 'sh5', 'sh6', 'sh2'],
+                            'Server8': ['sh1', 'sh3', 'sh5', 'sh6'],
+                            'Server9': ['sh2', 'sh4', 'sh1', 'sh6']
                             
                         }
             }

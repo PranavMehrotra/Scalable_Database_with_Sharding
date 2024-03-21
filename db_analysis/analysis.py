@@ -24,88 +24,79 @@ def generate_random_range():
     high = random.randint(low, low + 4000)
     return low, high
 
-def create_consistent_hashmap(servers: int,
-                            shards: int,
-                            replicas: int) -> Dict:
+# def create_consistent_hashmap(servers: int,
+#                             shards: int,
+#                             replicas: int) -> Dict:
     
-    total_replicas = shards * replicas
-    replicas_per_server = total_replicas // servers
-    replicas_left = total_replicas % servers
-    server_shard_map = {}
-    shard_replica_count = {f"sh{i+1}": replicas for i in range(shards)}
-    server_replica_assgn = {}
-    for i in range(servers):
-        if i < replicas_left:
-            server_replica_assgn[f"Server{i}"] = replicas_per_server + 1
-        else:
-            server_replica_assgn[f"Server{i}"] = replicas_per_server
+#     total_replicas = shards * replicas
+#     replicas_per_server = total_replicas // servers
+#     replicas_left = total_replicas % servers
+#     server_shard_map = {}
+#     shard_replica_count = {f"sh{i+1}": replicas for i in range(shards)}
+#     server_replica_assgn = {}
+#     for i in range(servers):
+#         if i < replicas_left:
+#             server_replica_assgn[f"Server{i}"] = replicas_per_server + 1
+#         else:
+#             server_replica_assgn[f"Server{i}"] = replicas_per_server
 
-    for i in range(servers):
-        start = i*replicas_per_server
-        end = (i+1)*replicas_per_server
-        idxs_per_server = [(idx%shards+1) for idx in range(start, end)]
-        shard_ids_per_server = [f"sh{idx}" for idx in idxs_per_server]
-        server_shard_map[f"Server{i}"] = shard_ids_per_server
-        server_replica_assgn[f"Server{i}"] -= len(shard_ids_per_server)
-        if server_replica_assgn[f"Server{i}"] == 0:
-            server_replica_assgn.pop(f"Server{i}")
-        for idx in idxs_per_server:
-            shard_replica_count[f"sh{idx}"] -= 1
-            if shard_replica_count[f"sh{idx}"] == 0:
-                shard_replica_count.pop(f"sh{idx}")
+#     for i in range(servers):
+#         start = i*replicas_per_server
+#         end = (i+1)*replicas_per_server
+#         idxs_per_server = [(idx%shards+1) for idx in range(start, end)]
+#         shard_ids_per_server = [f"sh{idx}" for idx in idxs_per_server]
+#         server_shard_map[f"Server{i}"] = shard_ids_per_server
+#         server_replica_assgn[f"Server{i}"] -= len(shard_ids_per_server)
+#         if server_replica_assgn[f"Server{i}"] == 0:
+#             server_replica_assgn.pop(f"Server{i}")
+#         for idx in idxs_per_server:
+#             shard_replica_count[f"sh{idx}"] -= 1
+#             if shard_replica_count[f"sh{idx}"] == 0:
+#                 shard_replica_count.pop(f"sh{idx}")
 
-    # distribute the remaining replicas among the left over servers
-    assert len(server_replica_assgn) == len(shard_replica_count) == replicas_left, "Replicas not distributed properly"
-    servers_left_ids = list(server_replica_assgn.keys())
-    shards_left_ids = list(shard_replica_count.keys())
+#     # distribute the remaining replicas among the left over servers
+#     assert len(server_replica_assgn) == len(shard_replica_count) == replicas_left, "Replicas not distributed properly"
+#     servers_left_ids = list(server_replica_assgn.keys())
+#     shards_left_ids = list(shard_replica_count.keys())
 
-    for server, shard in zip(servers_left_ids, shards_left_ids):
-        server_shard_map[server].append(shard)
-        server_replica_assgn[server] -= 1
-        shard_replica_count[shard] -= 1
+#     for server, shard in zip(servers_left_ids, shards_left_ids):
+#         server_shard_map[server].append(shard)
+#         server_replica_assgn[server] -= 1
+#         shard_replica_count[shard] -= 1
 
-    return server_shard_map
+#     return server_shard_map
 
 
-def create_init_json(args: Dict) -> Dict:
-    servers = int(args.servers)
-    shards = int(args.shards)
-    replicas = int(args.replicas)
+# def create_init_json(args: Dict) -> Dict:
+#     servers = int(args.servers)
+#     shards = int(args.shards)
+#     replicas = int(args.replicas)
 
-    return {
-        "N": servers,
-        "schema": {
-                    "columns":["Stud_id","Stud_name","Stud_marks"],
-                    "dtypes":["Number","String","String"]
-                },
-        "shards": [
-            {
-                "Stud_id_low": SHARD_SIZE * i,
-                "Shard_id": f"sh{i+1}",
-                "Shard_size": SHARD_SIZE
-            }
-            for i in range(shards)
-        ],
-        # "servers": create_consistent_hashmap(servers, shards, replicas)
-        "servers":{ 'Server0': ['sh1', 'sh2', 'sh3', 'sh4'],
-                    'Server1': ['sh3', 'sh4', 'sh2', 'sh1'],
-                    'Server2': ['sh4', 'sh1', 'sh2', 'sh3'],
-                    'Server3': ['sh1', 'sh2', 'sh3', 'sh4'],
-                    'Server4': ['sh3', 'sh4', 'sh2', 'sh1'],
-                    'Server5': ['sh4', 'sh1', 'sh2', 'sh3']
+#     return {
+#         "N": servers,
+#         "schema": {
+#                     "columns":["Stud_id","Stud_name","Stud_marks"],
+#                     "dtypes":["Number","String","String"]
+#                 },
+#         "shards": [
+#             {
+#                 "Stud_id_low": SHARD_SIZE * i,
+#                 "Shard_id": f"sh{i+1}",
+#                 "Shard_size": SHARD_SIZE
+#             }
+#             for i in range(shards)
+#         ],
+#         "servers":
+#         { 
+#                     'Server0': ['sh1', 'sh2', 'sh3', 'sh4'],
+#                     'Server1': ['sh3', 'sh4', 'sh2', 'sh1'],
+#                     'Server2': ['sh4', 'sh1', 'sh2', 'sh3'],
+#                     'Server3': ['sh1', 'sh2', 'sh3', 'sh4'],
+#                     'Server4': ['sh3', 'sh4', 'sh2', 'sh1'],
+#                     'Server5': ['sh4', 'sh1', 'sh2', 'sh3']
                     
-                    
-                    
-                    
-                    
-                    # 'Server1': ['sh3', 'sh4', 'sh2'],
-                    # 'Server2': ['sh4', 'sh1', 'sh2'],
-                    # 'Server3': ['sh1', 'sh2', 'sh3'],
-                    # 'Server4': ['sh3', 'sh4', 'sh2'],
-                    # 'Server5': ['sh4', 'sh1', 'sh2']
-                    
-                  }
-    }
+#                   }
+#     }
 
 # ----- API Calls -----
 
@@ -157,11 +148,11 @@ async def read_shard(session, json_data):
                 if response_json.get("data", None) is not None:
                     data_list = response_json.get("data", [])
 
-                    print("No of shards queried: ", response_json.get("shards_queried", 0))
+                    # print("No of shards queried: ", response_json.get("shards_queried", 0))
 
                     # print(response_json)
 
-                    print("No of data points read:", len(data_list))
+                    # print("No of data points read:", len(data_list))
 
                     # data_list.sort(key=lambda x: x["Stud_id"])
                     # print("Data points read:")
@@ -169,10 +160,10 @@ async def read_shard(session, json_data):
                     # for data in response_json.get("data", []):
                     #     print(data)
 
-                    print("No of data points read for shard 1:", len([data for data in data_list if data["Stud_id"] < 4096]))
-                    print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
-                    print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
-                    print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
+                    # print("No of data points read for shard 1:", len([data for data in data_list if data["Stud_id"] < 4096]))
+                    # print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
+                    # print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
+                    # print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
                     # print("No of data points read for shard 5:", len([data for data in data_list if data["Stud_id"] >= 16384 and data["Stud_id"] < 20480]))
                 else:
                     print(f"Response message: {response_json.get('message', 'No message')}")
@@ -217,7 +208,7 @@ async def update_shard_entry(session, json_data):
                 print(await response.text(), flush=True)
             return response.status
     except Exception as e:
-        print("Error:", e)
+        print("Error:", repr(e))
         return 500
     
 async def delete_shard_entry(session, json_data):
@@ -239,7 +230,7 @@ async def delete_shard_entry(session, json_data):
 async def send_requests(
         num_requests: int, 
         type: str = "write",
-        args: Dict = None):
+        data: Dict = None):
     try:
         sem = asyncio.Semaphore(SEMAPHORE_LIMIT)
         async with aiohttp.ClientSession() as session:
@@ -299,8 +290,7 @@ async def send_requests(
             # await asyncio.gather(*tasks)
                     
             elif type == "init":
-                json_data = create_init_json(args)
-                tasks.append(init(session, json_data))
+                tasks.append(init(session, data))
 
             elif type == "status":
                 tasks.append(status(session))

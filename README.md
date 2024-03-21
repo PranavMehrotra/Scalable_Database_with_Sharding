@@ -123,23 +123,104 @@ Code 137 indicated RAM memory related issue. Stop and remove already runining co
 ### 1. Stop docker container
 ```
 Particular container: docker stop container_id
-Stop all runing container: docker stop $(docker ps -a -q)
+Stop all running container: docker stop $(docker ps -a -q)
 ```
 
 ### 2. Remove docker container
 ```
 Particular container: docker rm container_id
-Stop all runing container: docker rm $(docker ps -a -q)
+Remove all running container: docker rm $(docker ps -a -q)
 ```
 
 
 # Evaluation
 
-## Read and Write Speed Analysis
+## Part-1: Read and Write Speed Analysis
 
-## Scaling number of shard replicas to 7
+  Leveraging the default configuration, i.e.,
 
-## Scaling number of servers to 10 and number of replicas to 8
+  ```
+  NUM_SERVERS: 6
+  NUM_SHARDS: 4
+  NUM_REPLICAS: 3
+  ```
+  We obtain the following statistics for 10000 write and read requests respectively:
+
+  ```
+    - Request Type: write
+
+        No of successful requests: 10000/10000
+        No of failed requests: 0/10000
+        Time taken to send 10000 requests: 188.25956535339355 seconds
+
+    - Request Type: read
+
+        No of successful requests: 10000/10000
+        No of failed requests: 0/10000
+        Time taken to send 10000 requests: 60.557310581207275 seconds
+  ```
+
+
+## Part-2: Scaling number of shard replicas to 6
+
+On setting `NUM_REPLICAS=6`, keeping the number of servers and shards fixed, i.e.,
+
+  ```
+  NUM_SERVERS: 6
+  NUM_SHARDS: 4
+  NUM_REPLICAS: 6
+  ```
+
+  We obtain the following statistics for 10000 write and read requests respectively:
+
+  ```
+- Request Type: write
+
+        No of successful requests: 10000/10000
+        No of failed requests: 0/10000
+        Time taken to send 10000 requests: 571.5665924549103 seconds
+
+- Request Type: read
+
+        No of successful requests: 9995/10000
+        No of failed requests: 5/10000
+        Time taken to send 10000 requests: 109.68647050857544 seconds
+  ```
+
+The increased latency for write and read requests can be attributed to the increased number of replicas for each shard. This implies that both write and read requests need to access all replicas of a shard to maintain consistency, increasing the time taken to handle requests.
+
+## Part-3 : Scaling number of servers to 10 and number of replicas to 8
+
+The following configuration for the database server, i.e.,
+
+  ```
+  NUM_SERVERS: 10
+  NUM_SHARDS: 6
+  NUM_REPLICAS: 8
+  ```
+
+  yields the following statistics for 10000 write and read requests respectively:
+
+  ```
+- Request Type: write
+
+    No of successful requests: 10000/10000
+    No of failed requests: 0/10000
+    Time taken to send 10000 requests: 758.3099572658539 seconds
+
+- Request Type: read
+
+    No of successful requests: 9999/10000
+    No of failed requests: 1/10000
+    Time taken to send 10000 requests: 110.17270064353943 seconds
+    
+  ```
+
+In this case, there is a noticeable, albeit slight increase in the latency for write and read requests compared to `Part-2`. 
+
+Why isn't the increase in latency for read requests as prominent as `Part-2`? It has to do with the fact that an increase in the number of servers leads to better distribution of read requests, implying that incoming requests face lesser contention while accessing shard replicas across a large number of servers. This leads to only a slight increase in the latency for handling read requests, as shown above. 
+
+For write requests, an increase in the number of replicas to be edited overcomes the benefit of less contention due to more servers, leading to a marked increase in latency for processing write requests.
 
 ## Server drop analysis
 
