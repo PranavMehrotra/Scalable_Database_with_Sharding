@@ -10,8 +10,7 @@ This repository contains the code for the Assignment-2 of Distributed Systems(CS
 
 # Table of Contents
 
-
-
+- [Group Details](#group-details)
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
   - [Building Docker Images](#building-docker-images)
@@ -28,7 +27,13 @@ This repository contains the code for the Assignment-2 of Distributed Systems(CS
   - [Scaling number of shard replicas to 7](#scaling_number_of_shard_replicas_to_7)
   - [Scaling number of servers to 10 and number of replicas to 8](#scaling_number_of_servers_to_10_and_number_of_replicas_to_8)
   - [Server drop analysis](#server_drop_analysis)
-- [Group Details](#group-details)
+
+
+# Group Details
+1. Pranav Mehrotra (20CS10085)
+2. Saransh Sharma (20CS30065)
+3. Pranav Nyati (20CS30037)
+4. Shreyas Jena (20CS30049)
 
 
 # Prerequisite
@@ -339,10 +344,5 @@ The server-shard mapping of the current configuration is as follows:
 
 As shown in Fig.5, after the heartbeat thread detects that `Server5` is down, it quickly respawns a new copy and copies the `sh3` and `sh4` contents from replicas in other servers to the same.
 
-# Group Details
-1. Pranav Mehrotra (20CS10085)
-2. Saransh Sharma (20CS30065)
-3. Pranav Nyati (20CS30037)
-4. Shreyas Jena (20CS30049)
 
 </font>
