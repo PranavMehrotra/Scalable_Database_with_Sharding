@@ -333,7 +333,7 @@ The server-shard mapping of the current configuration is as follows:
 ```
 
 <p align="center">
-      <img src="images/lb_cntr_stop_logs.png" width="90%"/><br><strong>Fig.4: Load-balancer logs showing the respawning of `Server5`</strong>
+      <img src="images/lb_cntr_logs.png" width="90%"/><br><strong>Fig.4: Load-balancer logs showing the respawning of `Server5`</strong>
 </p>
 
 
