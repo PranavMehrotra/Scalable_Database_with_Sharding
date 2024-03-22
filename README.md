@@ -30,6 +30,7 @@ This repository contains the code for the Assignment-2 of Distributed Systems(CS
 
 
 # Group Details
+Repo Link: https://github.com/PranavMehrotra/A2_Distributed_Systems 
 1. Pranav Mehrotra (20CS10085)
 2. Saransh Sharma (20CS30065)
 3. Pranav Nyati (20CS30037)
