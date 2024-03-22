@@ -135,8 +135,26 @@ Remove all running container: docker rm $(docker ps -a -q)
 
 # Evaluation
 
+## Pre-Analysis Setup
+
+```
+  # initialise and deploy containers
+   make install
+   make deploy
+```
 ## Part-1: Read and Write Speed Analysis
 
+```
+  # initialise database container with default configuration
+   cd db_analysis/
+   python p1.py --type init
+   python p1.py --type status       # check status
+
+  # run analysis file
+   python p1.py --type write --nreqs 10000        # should take 5-6 mins
+   python p1.py --type read --nreqs 10000
+
+```
   Leveraging the default configuration, i.e.,
 
   ```
@@ -162,6 +180,20 @@ Remove all running container: docker rm $(docker ps -a -q)
 
 
 ## Part-2: Scaling number of shard replicas to 6
+
+
+```
+  # initialise database container with specific configuration
+   cd db_analysis/
+   python p2.py --type init         # initialise database
+   python p2.py --type status       # check status
+
+  # run analysis file
+   cd db_analysis/
+   python p2.py --type write --nreqs 10000        # should take 5-6 mins
+   python p2.py --type read --nreqs 10000
+
+```
 
 On setting `NUM_REPLICAS=6`, keeping the number of servers and shards fixed, i.e.,
 
@@ -190,6 +222,20 @@ On setting `NUM_REPLICAS=6`, keeping the number of servers and shards fixed, i.e
 The increased latency for write and read requests can be attributed to the increased number of replicas for each shard. This implies that both write and read requests need to access all replicas of a shard to maintain consistency, increasing the time taken to handle requests.
 
 ## Part-3 : Scaling number of servers to 10 and number of replicas to 8
+
+
+```
+  # initialise database container with specific configuration
+   cd db_analysis/
+   python p3.py --type init         # initialise database
+   python p3.py --type status       # check status
+
+  # run analysis file
+   cd db_analysis/
+   python p3.py --type write --nreqs 10000        # should take 7-8 mins
+   python p3.py --type read --nreqs 10000
+
+```
 
 The following configuration for the database server, i.e.,
 

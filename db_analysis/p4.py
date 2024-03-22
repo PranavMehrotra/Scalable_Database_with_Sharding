@@ -82,17 +82,13 @@ if __name__ == '__main__':
             end = time.time()
             print(f"Time taken to send status request: {end-start} seconds")
         
-        elif request_type == "write":    
-            # if len(sys.argv) > 2:
-            #     NUM_WRITE_REQUESTS = int(sys.argv[2])
+        elif request_type == "write": 
             start = time.time()
             asyncio.run(send_requests(num_requests, "write"))
             end = time.time()
             print(f"Time taken to send {num_requests} requests: {end-start} seconds")
 
         elif request_type == "read":
-            # if len(sys.argv) > 2:
-            #     NUM_READ_REQUESTS = int(sys.argv[2])
             start = time.time()
             asyncio.run(send_requests(num_requests,"read"))
             end = time.time()
