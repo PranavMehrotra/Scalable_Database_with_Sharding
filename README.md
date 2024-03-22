@@ -3,7 +3,7 @@
 # Assignment-2 Distributed Systems
 This repository contains the code for the Assignment-2 of Distributed Systems(CS60002) course of Spring, 2024.
 
-# Implementing a Customizable Load Balancer
+# Implementing a Scalable Database with Sharding
 <p align="center">
       <img src="images/problem.png" width="90%"/><br><strong>Fig.1: Overview</strong>
 </p>
