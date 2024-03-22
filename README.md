@@ -189,7 +189,6 @@ Remove all running container: docker rm $(docker ps -a -q)
    python p2.py --type status       # check status
 
   # run analysis file
-   cd db_analysis/
    python p2.py --type write --nreqs 10000        # should take 5-6 mins
    python p2.py --type read --nreqs 10000
 
@@ -231,7 +230,6 @@ The increased latency for write and read requests can be attributed to the incre
    python p3.py --type status       # check status
 
   # run analysis file
-   cd db_analysis/
    python p3.py --type write --nreqs 10000        # should take 7-8 mins
    python p3.py --type read --nreqs 10000
 
@@ -268,7 +266,70 @@ Why isn't the increase in latency for read requests as prominent as `Part-2`? It
 
 For write requests, an increase in the number of replicas to be edited overcomes the benefit of less contention due to more servers, leading to a marked increase in latency for processing write requests.
 
-## Server drop analysis
+## Part-4: Endpoint Checking and Server Drop Analysis
+
+### Endpoint Checking
+
+```
+# initialise database container with specific configuration
+   cd db_analysis/
+   python p4.py --type init         # initialise database
+   python p4.py --type status       # check status
+
+  # write/read requests
+   python p4.py --type write --nreqs 100        
+   python p4.py --type read --nreqs 100
+```
+
+### Server Drop Analysis
+
+#### Initial Server configuration
+
+The initial server configuration consists of 6 servers (`Server0` to `Server5`), as shown in Fig.2.
+
+<p align="center">
+      <img src="images/before_stop_cntr.png" width="90%"/><br><strong>Fig.2: Initial Configuration</strong>
+</p>
+
+#### Server configuration after stopping container
+
+```
+  # list all active server containers
+    docker ps       
+
+  # select a random <container_id> and stop the container
+    docker stop <container_id>
+
+  # re-check the server configuration to see if the stopped container has respawned or noticeable
+    docker ps
+```
+
+<p align="center">
+      <img src="images/after_stop_cntr.png" width="90%"/><br><strong>Fig.3: Configuration just after stopping `Server5`</strong>
+</p>
+
+When `Server5` is stopped via `docker stop <container_id`, it is quickly respawned, as shown in Fig.3.
+
+#### Load-balancer side logs
+
+The server-shard mapping of the current configuration is as follows:
+
+
+```
+  'Server0': ['sh1', 'sh2']
+  'Server1': ['sh1', 'sh3']
+  'Server2': ['sh1', 'sh4']
+  'Server3': ['sh2', 'sh3']
+  'Server4': ['sh2', 'sh4']
+  'Server5': ['sh3', 'sh4']
+```
+
+<p align="center">
+      <img src="images/lb_cntr_stop_logs.png" width="90%"/><br><strong>Fig.4: Load-balancer logs showing the respawning of `Server5`</strong>
+</p>
+
+
+As shown in Fig.5, after the heartbeat thread detects that `Server5` is down, it quickly respawns a new copy and copies the `sh3` and `sh4` contents from replicas in other servers to the same.
 
 # Group Details
 1. Pranav Mehrotra (20CS10085)
