@@ -82,6 +82,23 @@ if __name__ == '__main__':
             end = time.time()
             print(f"Time taken to send status request: {end-start} seconds")
         
+        elif request_type == "add":
+            start = time.time()
+            config = {
+                "n": 2,
+                "new_shards": [{"Stud_id_low": 20480, "Shard_id": "sh6", "Shard_size":SHARD_SIZE}],
+                "servers": {
+                    "Server6": ["sh4", "sh5"],
+                    "Server[7]": ["sh1", "sh6"]
+                }
+            }
+            asyncio.run(send_requests(1,"add",config))
+            end = time.time()
+            print(f"Time taken to send add request: {end-start} seconds")
+        
+        elif request_type == "rm":
+            pass
+
         elif request_type == "write": 
             start = time.time()
             asyncio.run(send_requests(num_requests, "write"))
