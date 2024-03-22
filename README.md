@@ -279,6 +279,14 @@ For write requests, an increase in the number of replicas to be edited overcomes
   # write/read requests
    python p4.py --type write --nreqs 100        
    python p4.py --type read --nreqs 100
+
+  # update/delete requests
+   python p4.py --type update       # updates a random db entry
+   python p4.py --type delete       # deletes a random entry from all involved replicas
+
+  # add/remove servers
+   python p4.py --type add        # adds list of servers mentioned in script
+   python p4.py --type rm         # removes list of servers mentioned in script
 ```
 
 ### Server Drop Analysis

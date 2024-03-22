@@ -477,7 +477,7 @@ async def remove_server_handler(request):
     response_json = {
         "message": {
             "N" : len(server_list),
-            "replicas": server_list
+            "servers": removed_servers
         },
         "status": "successful"
     }

@@ -41,19 +41,19 @@ class LoadBalancer:
         self.consistent_hashing: dict[str, ConsistentHashing] = {}
 
     def add_servers(self, num_add, serv_to_shard: dict, should_spawn: bool = True):
-        def check_hostname(hostname: str):
-            pattern = r"Server\[\d+\]"
-            print(re.findall(pattern, hostname))
-            if re.findall(pattern, hostname):
-                num = random.randint(10000, 99999)
-                return f"Server{num}"
-            return hostname
+        # def check_hostname(hostname: str):
+        #     pattern = r"Server\[\d+\]"
+        #     print(re.findall(pattern, hostname))
+        #     if re.findall(pattern, hostname):
+        #         num = random.randint(10000, 99999)
+        #         return f"Server{num}"
+        #     return hostname
         
         error=""
         # temp_new_servers = set()
         # Make hostnames list unique(basically a set)
         hostnames = set(serv_to_shard.keys())
-        hostnames = set([check_hostname(hostname) for hostname in list(hostnames)])
+        # hostnames = set([check_hostname(hostname) for hostname in list(hostnames)])
         
         if (len(hostnames) != num_add):
             print(f"load_balancer: <Error> Length of servers dict is not equal to newly added instances")
