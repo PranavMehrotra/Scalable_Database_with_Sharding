@@ -73,11 +73,11 @@ async def read_shard(session, json_data):
                 if response_json.get("data", None) is not None:
                     data_list = response_json.get("data", [])
 
-                    # print("No of shards queried: ", response_json.get("shards_queried", 0))
+                    print("Shards queried: ", response_json.get("shards_queried", 0))
 
                     # print(response_json)
 
-                    # print("No of data points read:", len(data_list))
+                    print("No of data points read:", len(data_list))
 
                     # data_list.sort(key=lambda x: x["Stud_id"])
                     # print("Data points read:")
@@ -85,10 +85,10 @@ async def read_shard(session, json_data):
                     # for data in response_json.get("data", []):
                     #     print(data)
 
-                    # print("No of data points read for shard 1:", len([data for data in data_list if data["Stud_id"] < 4096]))
-                    # print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
-                    # print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
-                    # print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
+                    print("No of data points read for shard 1:", len([data for data in data_list if data["Stud_id"] < 4096]))
+                    print("No of data points read for shard 2:", len([data for data in data_list if data["Stud_id"] >= 4096 and data["Stud_id"] < 8192]))
+                    print("No of data points read for shard 3:", len([data for data in data_list if data["Stud_id"] >= 8192 and data["Stud_id"] < 12288]))
+                    print("No of data points read for shard 4:", len([data for data in data_list if data["Stud_id"] >= 12288 and data["Stud_id"] < 16384]))
                     # print("No of data points read for shard 5:", len([data for data in data_list if data["Stud_id"] >= 16384 and data["Stud_id"] < 20480]))
                 else:
                     print(f"Response message: {response_json.get('message', 'No message')}")
@@ -221,8 +221,8 @@ async def send_requests(
             elif type == "read":
                 for i in range(num_requests):
                     low,high = generate_random_range()
-                    # low = 0
-                    # high = STUD_ID_MAX
+                    low = 0
+                    high = STUD_ID_MAX
                     read_json = {
                         "Stud_id":{ "low": low, "high": high}
                     }

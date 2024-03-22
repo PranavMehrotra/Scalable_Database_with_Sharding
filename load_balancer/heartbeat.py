@@ -270,11 +270,13 @@ class HeartBeat(threading.Thread):
                 
                 # get the data from the existing server using the copy endpoint
                 status, response = synchronous_communicate_with_server(server, "copy", payload)
+                # print(f"Server {server} response: {response}", flush=True)
                 if status != 200:
                     print(f"heartbeat: Error in copying {shard_id} data from server {server} to server {server_name}\nError: {response.get('message', 'Unknown error')}", flush=True)
                     continue
                 else:
                     shard_data_copy[shard_id] = response[shard_id]
+                    # print("Response shard data: ", response[shard_id], flush=True)
                     data_copied = True
                     break
                 
@@ -284,9 +286,18 @@ class HeartBeat(threading.Thread):
             
         # send the copied data to the new server for all shards in parallel
         # tasks = []
+        # for shard_id in shard_data_copy.keys():
+            # print(f"{shard_id}: {shard_data_copy[shard_id]}", flush=True)
         
         rollback = False
         for shard_id in shard_data_copy.keys():
+            
+            # if shard_data_copy[shard_id] is an empty list, then skip writing the data to the server 
+            # as it means that the shard is empty in all the active servers and hence the new server should also have an empty shard
+            if len(shard_data_copy[shard_id]) == 0:
+                print(f"heartbeat: Skipping writing {shard_id} data to server {server_name} as it is empty in all active servers", flush=True)
+                continue
+            
             write_payload = {
                 "shard": shard_id,
                 "curr_idx": 0,
