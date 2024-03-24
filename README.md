@@ -10,23 +10,36 @@ This repository contains the code for the Assignment-2 of Distributed Systems(CS
 
 # Table of Contents
 
+- [Assignment-2 Distributed Systems](#assignment-2-distributed-systems)
+- [Implementing a Scalable Database with Sharding](#implementing-a-scalable-database-with-sharding)
+- [Table of Contents](#table-of-contents)
 - [Group Details](#group-details)
-- [Prerequisites](#prerequisites)
+- [Prerequisite](#prerequisite)
+  - [1. Docker: latest](#1-docker-latest)
+  - [2. Docker-compose standalone](#2-docker-compose-standalone)
 - [Getting Started](#getting-started)
   - [Building Docker Images](#building-docker-images)
   - [Running Docker Containers](#running-docker-containers)
-  - [Interact With System](#interact-with-system)
-  - [Remove Existing Container](#interact-with-system)
+  - [Interact with System](#interact-with-system)
+  - [Remove Existing Container](#remove-existing-container)
   - [Clear Existing Images](#clear-existing-images)
 - [Design Choices](#design-choices)
 - [Troubleshooting](#troubleshooting)
   - [Docker Exit with Code 137](#docker-exit-with-code-137)
   - [Removing Docker Containers](#removing-docker-containers)
+    - [1. Stop docker container](#1-stop-docker-container)
+    - [2. Remove docker container](#2-remove-docker-container)
 - [Evaluation](#evaluation)
-  - [Read and Write Speed Analysis](#read_and_write_speed_analysis)
-  - [Scaling number of shard replicas to 7](#scaling_number_of_shard_replicas_to_7)
-  - [Scaling number of servers to 10 and number of replicas to 8](#scaling_number_of_servers_to_10_and_number_of_replicas_to_8)
-  - [Server drop analysis](#server_drop_analysis)
+  - [Pre-Analysis Setup](#pre-analysis-setup)
+  - [Part-1: Read and Write Speed Analysis](#part-1-read-and-write-speed-analysis)
+  - [Part-2: Scaling number of shard replicas to 6](#part-2-scaling-number-of-shard-replicas-to-6)
+  - [Part-3 : Scaling number of servers to 10 and number of replicas to 8](#part-3--scaling-number-of-servers-to-10-and-number-of-replicas-to-8)
+  - [Part-4: Endpoint Checking and Server Drop Analysis](#part-4-endpoint-checking-and-server-drop-analysis)
+    - [Endpoint Checking](#endpoint-checking)
+    - [Server Drop Analysis](#server-drop-analysis)
+      - [Initial Server configuration](#initial-server-configuration)
+      - [Server configuration after stopping container](#server-configuration-after-stopping-container)
+      - [Load-balancer side logs](#load-balancer-side-logs)
 
 
 # Group Details
@@ -114,9 +127,14 @@ It is advisable to run this command before executing the main code to eliminate 
 
 # Design Choices
 <ol>
+<li> Every server container maintains both a SQL database to store the shard data and a server application to handle config/read/write/delete operations. So, the server container is a combination of a SQL database and a server application. It handles the requests/queries from the load balancer and updates the data in the SQL database accordingly, as well as sends the response back to the load balancer. </li>
 <li> When executing the /add endpoint, users may provide existing server hostnames as part of the request. In such cases, the load balancer takes a proactive approach to ensure that the specified num_add parameter is honored. Even if the user supplies hostnames that already exist in the system, the load balancer will ignore already existing hostnames and generate new hostnames for additional servers to fulfill the exact count specified by num_add.
 <li> When executing the /rm endpoint, users may provide hostnames for removal. To ensure the specified number of servers to be removed is consistently achieved, the load balancer employs a strategy wherein, if the user-provided hostname doesn't exist in the system, it randomly selects and removes a server hostname from the existing set.
 <li> Every server is equipped with a heartbeat thread that sends a heartbeat message every 0.2 seconds. If no heartbeat is detected for two consecutive attempts, the server is declared dead, triggering the spawning of a new server. This mechanism prevents premature declarations of server death due to network fluctuations, ensuring stability in the system.</li>
+<li> The load balancer maintains two dictionaries: one ShardT Schema (which maps the lowest data entry index to its corresponding shard id) and one MapT schema (which maps the shard id to the list of server ids that contain replicas of that shard). Whenever there is a change in the server configuration (init/add/removal), or an update (write/delete) in a shard data, the load balancer updates these dictionaries to reflect the new changes accurately.</li>
+<li> Metadata SQL server: In addition to the dictionaries maintained in the load balancer, we also deploy a metadata server that also stores the ShardT and MapT schemas in a SQL database. This server is used to have a backup of the metadata in case of a load balancer failure (Note that it does not store the actual shard data, but only these two mappings). 
+We employ a Checkpointing mechanism that periodically updates the ShardT and MapT schemas in the metadata server by querying these mappings from the load balancer (every 30 seconds). This ensures that the metadata server is up-to-date with the latest mappings, even if the load balancer fails. </li> We used a periodic checkpoint mechanism rather than an immediate update to avoid frequent updates to the metadata server, which could lead to performance degradation, as then the metadata server would need to be updated for every write/delete operation/service configuration change. </li>
+<li> Recovery mechanism for servers: We implement a recovery mechanism for servers using the heartbeat thread. If a server crashes, the heartbeat thread detects it, respawns a new server container, and reconfigures it with the correct database schema. Next, the heartbeat thread copies the data for the shards (which were maintained by the crashed server) from the the shard replicas in the other servers and repopulates the new server. This ensures that the new server is up-to-date with the latest data and is ready to serve requests. </li>
 </ol>
 
 # Troubleshooting
