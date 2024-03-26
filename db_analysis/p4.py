@@ -88,8 +88,8 @@ if __name__ == '__main__':
                 "n": 2,
                 "new_shards": [{"Stud_id_low": 16384, "Shard_id": "sh5", "Shard_size": SHARD_SIZE}],
                 "servers": {
-                    "Server6": ["sh4", "sh5"],
-                    "Server7": ["sh1", "sh5"]
+                    "Server3": ["sh4", "sh5"],
+                    "Server4": ["sh1", "sh5"]
                 }
             }
             asyncio.run(send_requests(1,"add",config))
