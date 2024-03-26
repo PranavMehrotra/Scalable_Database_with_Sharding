@@ -1,6 +1,0 @@
-USAGE:
-
-    python p2.py --type <type> --nreqs <nreqs> [--servers <servers> --shards <shards> --replicas <replicas>]
-
-- Start with type="init", set replicas to some value.
-- Then, use type="read/write" and --nreqs to send requests.
